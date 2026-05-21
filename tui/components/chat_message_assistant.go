@@ -50,7 +50,5 @@ func (c *Chat) renderAssistantMessage(msg chatMessage) string {
 	for i, line := range lines {
 		lines[i] = lineStyle.Render(line)
 	}
-	rendered := strings.Join(lines, "\n")
-
-	return rendered + messageGap
+	return strings.Join(lines, "\n") + messageGap
 }
