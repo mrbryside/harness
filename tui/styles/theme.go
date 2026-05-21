@@ -21,4 +21,7 @@ var (
 	// Agent mode label colors (shown in the input footer).
 	ModeBuildColor = lipgloss.Color("#7aa2f7") // blue — write/execute mode
 	ModePlanColor  = lipgloss.Color("#bb9af7") // purple — plan/think mode
+	// SelectionBg is the background colour painted over text the user is
+	// actively selecting with the mouse in the chat viewport.
+	SelectionBg = lipgloss.Color("#3d59a1") // muted blue
 )

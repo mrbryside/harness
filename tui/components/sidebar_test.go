@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mrbryside/harness/components"
+	"github.com/mrbryside/harness/tui/components"
 )
 
 func TestSidebarViewContainsModelName(t *testing.T) {

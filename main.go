@@ -5,7 +5,7 @@ import (
 	"os"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/mrbryside/harness/app"
+	"github.com/mrbryside/harness/tui/app"
 	"github.com/mrbryside/harness/llm"
 )
 
@@ -15,6 +15,10 @@ import (
 // a hard flick fills the event queue with hundreds of events that the
 // main loop has to process one-by-one (each one re-renders the View),
 // so scrolling feels frozen for a beat after the user stops.
+//
+// Wheel events over the *input* panel are never filtered — the input
+// has its own scrollable viewport and the user expects wheel-up/down
+// there to scroll the input regardless of the chat's scroll position.
 func wheelFilter(m tea.Model, msg tea.Msg) tea.Msg {
 	wheel, ok := msg.(tea.MouseWheelMsg)
 	if !ok {
@@ -22,6 +26,9 @@ func wheelFilter(m tea.Model, msg tea.Msg) tea.Msg {
 	}
 	model, ok := m.(app.Model)
 	if !ok {
+		return msg
+	}
+	if model.MouseInInput(wheel.X, wheel.Y) {
 		return msg
 	}
 	switch wheel.Button {

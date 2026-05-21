@@ -5,7 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/mrbryside/harness/styles"
+	"github.com/mrbryside/harness/tui/styles"
 )
 
 const SidebarWidth = 40

@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/mrbryside/harness/app"
-	"github.com/mrbryside/harness/components"
+	"github.com/mrbryside/harness/tui/app"
+	"github.com/mrbryside/harness/tui/components"
 )
 
 func TestViewContainsChatContent(t *testing.T) {

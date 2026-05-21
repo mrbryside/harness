@@ -3,8 +3,8 @@ package app
 import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/mrbryside/harness/components"
-	"github.com/mrbryside/harness/styles"
+	"github.com/mrbryside/harness/tui/components"
+	"github.com/mrbryside/harness/tui/styles"
 )
 
 // Outer margin around the entire layout so chat / input / sidebar all share
