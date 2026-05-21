@@ -77,6 +77,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.chat, cmd = m.chat.Update(msg)
 		return m, cmd
 
+	// ── bracketed paste (incl. drag-and-drop file paths) ─────────────────────
+	// Most terminals send dropped file paths as a bracketed-paste sequence,
+	// which Bubble Tea decodes to tea.PasteMsg. Forward it to the input so
+	// the textarea inserts the path at the cursor.
+	case tea.PasteMsg:
+		var cmd tea.Cmd
+		m.input, cmd = m.input.Update(msg)
+		m = m.reflowChat()
+		return m, cmd
+
 	// ── user pressed Enter in input ──────────────────────────────────────────
 	case components.SendMsg:
 		if msg.Content == "" || m.streaming {
