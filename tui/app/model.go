@@ -4,22 +4,25 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/mrbryside/harness/tui/components"
 	"github.com/mrbryside/harness/llm"
+	"github.com/mrbryside/harness/tui/commands"
+	"github.com/mrbryside/harness/tui/components"
 )
 
 // Model is the root Bubble Tea model that wires all components together.
 type Model struct {
-	chat      components.Chat
-	input     components.Input
-	sidebar   components.Sidebar
-	statusbar components.StatusBar
-	provider  llm.LLMProvider // always the interface — never the concrete type
-	messages  []llm.Message
-	streaming bool
-	streamCh  <-chan llm.Chunk // active stream channel; nil when not streaming
-	width     int
-	height    int
+	chat         components.Chat
+	input        components.Input
+	sidebar      components.Sidebar
+	statusbar    components.StatusBar
+	autocomplete components.Autocomplete
+	cmdRegistry  *commands.Registry
+	provider     llm.LLMProvider // always the interface — never the concrete type
+	messages     []llm.Message
+	streaming    bool
+	streamCh     <-chan llm.Chunk // active stream channel; nil when not streaming
+	width        int
+	height       int
 
 	// Ctrl+C debounce state: when the user presses Ctrl+C once while not
 	// streaming we show a hint and wait for a second press within this
@@ -33,13 +36,43 @@ const ctrlCDebounceWindow = 1500 * time.Millisecond
 
 // New creates an initialised Model with the given provider.
 func New(provider llm.LLMProvider) Model {
+	registry := commands.NewRegistry()
+	registry.Register(commands.NewHelpCommand())
+	registry.Register(commands.NewClearCommand())
+	registry.Register(commands.NewBuildCommand())
+	registry.Register(commands.NewPlanCommand())
+	registry.Register(commands.NewModelCommand())
+	registry.Register(commands.NewHistoryCommand())
+	registry.Register(commands.NewSaveCommand())
+	registry.Register(commands.NewLoadCommand())
+	registry.Register(commands.NewSettingsCommand())
+	registry.Register(commands.NewQuitCommand())
+	registry.Register(commands.NewThemeCommand())
+	registry.Register(commands.NewExportCommand())
+	registry.Register(commands.NewRestartCommand())
+	registry.Register(commands.NewAgentCommand())
+
+	auto := components.NewAutocomplete()
+	auto.SetProvider(func() []components.Suggestion {
+		var suggestions []components.Suggestion
+		for _, cmd := range registry.All() {
+			suggestions = append(suggestions, components.Suggestion{
+				Command:     "/" + cmd.Name(),
+				Description: cmd.Description(),
+			})
+		}
+		return suggestions
+	})
+
 	return Model{
-		chat:      components.NewChat(80, 20),
-		input:     components.NewInput(provider.Name()),
-		sidebar:   components.NewSidebar(provider.Name()),
-		statusbar: components.NewStatusBar(),
-		provider:  provider,
-		messages:  []llm.Message{},
+		chat:         components.NewChat(80, 20),
+		input:        components.NewInput(provider.Name()),
+		sidebar:      components.NewSidebar(provider.Name()),
+		statusbar:    components.NewStatusBar(),
+		autocomplete: auto,
+		cmdRegistry:  registry,
+		provider:     provider,
+		messages:     []llm.Message{},
 	}
 }
 

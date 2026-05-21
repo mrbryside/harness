@@ -44,8 +44,8 @@ func (s Sidebar) Update(msg tea.Msg) (Sidebar, tea.Cmd) {
 func (s Sidebar) View() string {
 	// Each line is rendered full-width with PanelBg so there's no transparent
 	// strip on the right of short labels like "Model" / "Tokens".
-	innerWidth := SidebarWidth - 2 // account for Padding(1,1)
-	lineStyle := lipgloss.NewStyle().Background(styles.PanelBg).Width(innerWidth)
+	innerWidth := SidebarWidth - 4 // account for Padding(1,2)
+	lineStyle := lipgloss.NewStyle().Background(styles.Background).Width(innerWidth)
 
 	label := func(s string) string {
 		return lineStyle.Foreground(styles.SidebarLabel).Render(s)
@@ -58,8 +58,8 @@ func (s Sidebar) View() string {
 	formattedTokens := formatTokens(s.tokens)
 
 	statusLine := lineStyle.Render(
-		lipgloss.NewStyle().Foreground(styles.ConnectedDot).Background(styles.PanelBg).Render("● ") +
-			lipgloss.NewStyle().Foreground(styles.SidebarValue).Background(styles.PanelBg).Render("Connected"),
+		lipgloss.NewStyle().Foreground(styles.ConnectedDot).Background(styles.Background).Render("● ") +
+			lipgloss.NewStyle().Foreground(styles.SidebarValue).Background(styles.Background).Render("Connected"),
 	)
 
 	content := lipgloss.JoinVertical(lipgloss.Left,
@@ -72,15 +72,14 @@ func (s Sidebar) View() string {
 		label("Cost"),
 		value("$0.00"),
 		blank,
-		blank,
 		label("Status"),
 		statusLine,
 	)
 
 	return lipgloss.NewStyle().
 		Width(SidebarWidth).
-		Background(styles.PanelBg).
-		Padding(1, 1).
+		Background(styles.Background).
+		Padding(1, 2).
 		Render(content)
 }
 

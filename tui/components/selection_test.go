@@ -3,6 +3,8 @@ package components
 import (
 	"strings"
 	"testing"
+
+	"github.com/mrbryside/harness/tui/styles"
 )
 
 // Lifecycle: Start activates, Clear deactivates, Extend updates end.
@@ -68,7 +70,7 @@ func TestSelectionTextFromContent(t *testing.T) {
 	}
 }
 
-// Overlay paints SelectionBgSGR over the selected range using the
+// Overlay paints styles.SelectionBgSGR over the selected range using the
 // caller-supplied background reset SGR.
 func TestSelectionOverlayUsesCallerBg(t *testing.T) {
 	const fakeBg = "\x1b[48;2;1;2;3m"
@@ -78,7 +80,7 @@ func TestSelectionOverlayUsesCallerBg(t *testing.T) {
 
 	rendered := "hello world"
 	got := s.Overlay(rendered, 0, fakeBg)
-	if !strings.Contains(got, SelectionBgSGR+"hello") {
+	if !strings.Contains(got, styles.SelectionBgSGR+"hello") {
 		t.Errorf("expected selection BG before 'hello', got %q", got)
 	}
 	if !strings.Contains(got, "hello"+fakeBg) {
@@ -97,7 +99,7 @@ func TestSelectionOverlayYOffsetTranslation(t *testing.T) {
 
 	got := s.Overlay(rendered, 2, fakeBg)
 	first := strings.Split(got, "\n")[0]
-	if !strings.HasPrefix(first, SelectionBgSGR) {
+	if !strings.HasPrefix(first, styles.SelectionBgSGR) {
 		t.Errorf("expected first visible line to start with selection BG, got %q", first)
 	}
 }

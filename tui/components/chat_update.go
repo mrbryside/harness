@@ -22,7 +22,7 @@ func (c *Chat) SelectClear() { c.sel.Clear() }
 func (c Chat) HasSelection() bool { return c.sel.Active() }
 
 // SelectedText returns the plain text covered by the selection.
-func (c Chat) SelectedText() string { return c.sel.Text(c.viewport.GetContent()) }
+func (c Chat) SelectedText() string { return c.sel.Text(StripANSI(c.viewport.View())) }
 
 func (c Chat) Update(msg tea.Msg) (Chat, tea.Cmd) {
 	var cmd tea.Cmd

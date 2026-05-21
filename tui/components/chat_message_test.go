@@ -57,21 +57,6 @@ func TestChatRendersMarkdownInAssistant(t *testing.T) {
 	}
 }
 
-func TestChatStripsInlineCodeBackground(t *testing.T) {
-	c := components.NewChat(80, 24)
-	c.AppendMessage("assistant", "use `go test` to run")
-	view := c.View()
-	if strings.Contains(view, "48;5;236") {
-		t.Errorf("expected inline code BG 48;5;236 to be stripped, got:\n%q", view)
-	}
-	if !strings.Contains(view, "38;5;203") {
-		t.Errorf("expected inline code FG 38;5;203 to be preserved, got:\n%q", view)
-	}
-	if !strings.Contains(view, "go test") {
-		t.Errorf("expected 'go test' text in view, got:\n%s", view)
-	}
-}
-
 func TestChatFencedCodeBlockEmptyLinesHaveBlackBg(t *testing.T) {
 	c := components.NewChat(120, 30)
 	c.AppendMessage("assistant",

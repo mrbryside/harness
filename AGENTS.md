@@ -26,6 +26,9 @@ The deepest, most up-to-date reference is **`docs/learn/`**. Start with
 `docs/learn/README.md`, then drill into the topic you need. This file is the
 short version that an agent must internalize before touching code.
 
+> **Agent-specific docs** live in `docs/ai/`. Read them **only when necessary**
+> — i.e. when the task at hand requires it. Do not read proactively.
+
 ---
 
 ## Architecture (read this in full)
@@ -40,23 +43,34 @@ short version that an agent must internalize before touching code.
 ├──────────────────────────────────────────────────────┤
 │  app/  (orchestration only)                          │
 │    model.go   — root Model holds all components      │
-│    update.go  — routes messages, runs stream loop    │
+│    update*.go — message routing by concern           │
 │    view.go    — composes the final screen            │
 ├──────────────────────────────────────────────────────┤
 │  components/  (standalone Bubble Tea sub-models)     │
-│    chat.go      — scrollable message history         │
-│    input.go     — textarea + Build/Plan mode footer  │
-│    sidebar.go   — right-side info panel              │
-│    statusbar.go — bottom status line                 │
+│    chat*.go       — scrollable message history       │
+│    input*.go      — textarea + Build/Plan footer     │
+│    selection*.go  — drag-to-select primitive         │
+│    sidebar.go     — right-side info panel            │
+│    statusbar.go   — bottom status line               │
+│    autocomplete.go — slash-command overlay           │
+├──────────────────────────────────────────────────────┤
+│  commands/  (slash command system)                   │
+│    command*.go — registry + individual commands      │
+├──────────────────────────────────────────────────────┤
+│  memory/  (input history)                            │
+│    input_mem_history.go — HistoryStorage interface   │
 ├──────────────────────────────────────────────────────┤
 │  llm/  (provider abstraction)                        │
 │    provider.go — LLMProvider interface + types       │
 │    mock.go     — MockProvider (canned dev data)      │
 ├──────────────────────────────────────────────────────┤
 │  styles/                                             │
-│    theme.go    — every color used in the app         │
+│    theme.go      — every color used in the app       │
+│    chat_style.go — glamour JSON theme generator      │
 ├──────────────────────────────────────────────────────┤
 │  docs/learn/   — long-form architecture & recipes    │
+│  docs/ai/      — agent-specific guidance (read only  │
+│                  when necessary)                     │
 └──────────────────────────────────────────────────────┘
 ```
 
@@ -67,6 +81,8 @@ short version that an agent must internalize before touching code.
 | `main` | Wiring concrete provider into `app.New`, starting Tea | Hold any business logic |
 | `app` | Routing tea messages, streaming loop, layout math | Render component internals, define colors |
 | `components` | One self-contained UI piece each | Know about other components or `llm.*` |
+| `commands` | Slash command registry and execution | Touch UI / Tea directly |
+| `memory` | Input history storage interface | Touch UI / Tea |
 | `llm` | `LLMProvider` interface, types, mock | Touch UI / Tea |
 | `styles` | The single source of truth for colors | Depend on anything else in the repo |
 
@@ -119,14 +135,22 @@ Module path is `github.com/mrbryside/harness` — keep it that way.
 
 ## Theme
 
-All colors are defined in `styles/theme.go`. Two-tone palette:
+All colors are defined in `styles/theme.go`. Palette:
 
-- `Background` — chat area (darker)
-- `PanelBg`    — sidebar / input / user-message panel (lighter)
+- `ChatBackground` — main chat area + status bar (#0a0a0a)
+- `Background`     — sidebar + user-message panels (#141414)
+- `PanelBg`        — input area (#1e1e1e)
 
 Plus accent colors (`UserBorder`, `StatusBarAccent`, `ConnectedDot`,
 `ModeBuildColor`, `ModePlanColor`, `SidebarLabel`, `SidebarValue`,
-`AssistantText`, `StatusBarBg`).
+`AssistantText`).
+
+### Changing theme colors
+
+When modifying colors, you must update **both** the `lipgloss.Color` variable
+and its matching ANSI SGR constant (e.g. `ChatBackground` + `ChatBgSGR`).
+The SGR constants are injected after glamour/lipgloss resets to prevent
+background bleed. Read `docs/ai/theme-guide.md` before making theme changes.
 
 Do not hardcode hex anywhere else.
 
@@ -191,12 +215,12 @@ Three layers can each emit those resets independently:
    culprit. In practice viewport is the outermost emitter, which is
    why the fix lives in `Chat.View()`.
 
-5. **Patch at the outermost layer.** Insert `chatBgSGR` right after
+5. **Patch at the outermost layer.** Insert `ChatBgSGR` right after
    every reset:
 
    ```go
-   out = strings.ReplaceAll(out, "\x1b[m",  "\x1b[m"+chatBgSGR)
-   out = strings.ReplaceAll(out, "\x1b[0m", "\x1b[0m"+chatBgSGR)
+   out = strings.ReplaceAll(out, "\x1b[m",  "\x1b[m"+styles.ChatBgSGR)
+   out = strings.ReplaceAll(out, "\x1b[0m", "\x1b[0m"+styles.ChatBgSGR)
    ```
 
    Doing this at `View()` covers resets from all three layers in one

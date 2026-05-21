@@ -5,10 +5,6 @@ import (
 	"strings"
 )
 
-// SelectionBgSGR is the 24-bit background colour painted over every
-// selected cell.
-const SelectionBgSGR = "\x1b[48;2;61;89;161m"
-
 var ansiRE = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
 
 // StripANSI removes ANSI CSI escape sequences from s.

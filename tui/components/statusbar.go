@@ -26,8 +26,8 @@ type StatusMsg struct {
 //   - Right: default "ctrl+p · commands · version" hint.
 type StatusBar struct {
 	width        int
-	message      string        // active center toast (empty = none)
-	messageUntil time.Time     // when the toast expires
+	message      string    // active center toast (empty = none)
+	messageUntil time.Time // when the toast expires
 }
 
 func NewStatusBar() StatusBar {
@@ -90,13 +90,13 @@ func (s StatusBar) Update(msg tea.Msg) (StatusBar, tea.Cmd) {
 }
 
 func (s StatusBar) View() string {
-	bg := lipgloss.NewStyle().Background(styles.Background)
-	accent := lipgloss.NewStyle().Foreground(styles.StatusBarAccent).Background(styles.Background).Bold(true)
-	muted := lipgloss.NewStyle().Foreground(styles.SidebarValue).Background(styles.Background)
+	bg := lipgloss.NewStyle().Background(styles.ChatBackground)
+	muted := lipgloss.NewStyle().Foreground(styles.SidebarValue).Background(styles.ChatBackground)
+	white := lipgloss.NewStyle().Foreground(styles.AssistantText).Background(styles.ChatBackground).Bold(true)
 
 	// Right-side default hint.
 	right := lipgloss.JoinHorizontal(lipgloss.Left,
-		accent.Render("ctrl+p"),
+		white.Render("ctrl+p"),
 		muted.Render("  commands  "),
 		muted.Render(statusBarVersion),
 	)
@@ -108,7 +108,7 @@ func (s StatusBar) View() string {
 
 	if s.isMessageActive() {
 		// Left-aligned message (no background).
-		leftMsg := accent.Render(s.message)
+		leftMsg := white.Render(s.message)
 		leftWidth := lipgloss.Width(leftMsg)
 		rightWidth := lipgloss.Width(right)
 
@@ -119,7 +119,7 @@ func (s StatusBar) View() string {
 
 		return bg.Width(s.width).Padding(1, 2).Render(
 			leftMsg +
-				lipgloss.NewStyle().Background(styles.Background).Width(gapWidth).Render("") +
+				lipgloss.NewStyle().Background(styles.ChatBackground).Width(gapWidth).Render("") +
 				right,
 		)
 	}
@@ -127,6 +127,6 @@ func (s StatusBar) View() string {
 	// No center toast — right-aligned default.
 	rightWidth := lipgloss.Width(right)
 	return bg.Width(s.width).Padding(1, 2).Render(
-		lipgloss.NewStyle().Background(styles.Background).Width(innerWidth-rightWidth).Render("") + right,
+		lipgloss.NewStyle().Background(styles.ChatBackground).Width(innerWidth-rightWidth).Render("") + right,
 	)
 }

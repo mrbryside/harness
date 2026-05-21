@@ -1,6 +1,8 @@
 package app
 
 import (
+	"strings"
+
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/mrbryside/harness/tui/components"
@@ -18,28 +20,40 @@ const (
 
 func (m Model) View() tea.View {
 	v := tea.NewView(m.render())
-	// Declarative terminal-feature flags (v2): alt-screen + mouse capture
-	// replace what used to be tea.WithAltScreen() / tea.WithMouseCellMotion()
-	// program options.
 	v.AltScreen = true
 	v.MouseMode = tea.MouseModeCellMotion
-	// Ask the terminal to disambiguate keys via the Kitty keyboard protocol
-	// so Shift+Enter arrives as a distinct event (with tea.ModShift set)
-	// instead of being indistinguishable from plain Enter. Terminals that
-	// don't support the protocol simply ignore the request.
 	v.KeyboardEnhancements.ReportAllKeysAsEscapeCodes = true
 	return v
 }
 
-// render builds the full screen string. Separated from View() so the rest
-// of the app (and tests) can work with a plain string when convenient.
+// overlayAtBottom replaces the last N lines of base with overlay content.
+// Used to draw autocomplete flush against the input without affecting layout.
+func overlayAtBottom(base, overlay string, width int) string {
+	if overlay == "" {
+		return base
+	}
+	baseLines := strings.Split(base, "\n")
+	overlayLines := strings.Split(overlay, "\n")
+
+	n := len(overlayLines)
+	start := len(baseLines) - n
+	if start < 0 {
+		start = 0
+	}
+
+	// Build result: keep top lines, append overlay lines.
+	result := make([]string, 0, len(baseLines))
+	result = append(result, baseLines[:start]...)
+	result = append(result, overlayLines...)
+
+	return strings.Join(result, "\n")
+}
+
+// render builds the full screen string.
 func (m Model) render() string {
 	statusView := m.statusbar.View()
 	statusLines := lipgloss.Height(statusView)
 
-	// Sidebar is flush to the top/right/bottom edges (no outer margin on those sides).
-	// Only the chat + input column gets the left/top outer margin and reserves
-	// space for the status bar at the bottom.
 	sidebarWidth := components.SidebarWidth
 	chatWidth := m.width - outerMarginX - innerGap - sidebarWidth
 	if chatWidth < 1 {
@@ -53,58 +67,57 @@ func (m Model) render() string {
 	if chatHeight < 1 {
 		chatHeight = 1
 	}
-	// Sidebar fills the entire terminal height — no top or bottom margin.
 	sidebarHeight := m.height
 
 	chatBlock := lipgloss.Place(
 		chatWidth, chatHeight,
 		lipgloss.Left, lipgloss.Top,
 		m.chat.View(),
-		lipgloss.WithWhitespaceStyle(lipgloss.NewStyle().Background(styles.Background)),
+		lipgloss.WithWhitespaceStyle(lipgloss.NewStyle().Background(styles.ChatBackground)),
 	)
+
+	// Overlay autocomplete at the very bottom of the chat block.
+	if m.autocomplete.Active() {
+		autoView := m.autocomplete.View(chatWidth)
+		chatBlock = overlayAtBottom(chatBlock, autoView, chatWidth)
+	}
 
 	sidebarBlock := lipgloss.Place(
 		sidebarWidth, sidebarHeight,
 		lipgloss.Left, lipgloss.Top,
 		m.sidebar.View(),
-		lipgloss.WithWhitespaceStyle(lipgloss.NewStyle().Background(styles.PanelBg)),
+		lipgloss.WithWhitespaceStyle(lipgloss.NewStyle().Background(styles.Background)),
 	)
 
-	// Left column = top margin + chat + gap + input + status bar.
-	// Its height equals sidebarHeight so the horizontal join lines up cleanly.
 	leftColContentHeight := chatHeight + inputLines + outerMarginY + chatInputGap
 	leftMargin := lipgloss.NewStyle().
 		Width(outerMarginX).
 		Height(leftColContentHeight).
-		Background(styles.Background).
+		Background(styles.ChatBackground).
 		Render("")
 
 	topMarginLeft := lipgloss.NewStyle().
 		Width(chatWidth).
 		Height(outerMarginY).
-		Background(styles.Background).
+		Background(styles.ChatBackground).
 		Render("")
 
 	chatInputSpacer := lipgloss.NewStyle().
 		Width(chatWidth).
 		Height(chatInputGap).
-		Background(styles.Background).
+		Background(styles.ChatBackground).
 		Render("")
 
 	leftStack := lipgloss.JoinVertical(lipgloss.Left, topMarginLeft, chatBlock, chatInputSpacer, inputView)
 	leftCol := lipgloss.JoinHorizontal(lipgloss.Top, leftMargin, leftStack)
 
-	// Gap column between left stack and sidebar (chat-colored).
 	gapCol := lipgloss.NewStyle().
 		Width(innerGap).
 		Height(leftColContentHeight).
-		Background(styles.Background).
+		Background(styles.ChatBackground).
 		Render("")
 
 	leftWithGap := lipgloss.JoinHorizontal(lipgloss.Top, leftCol, gapCol)
-
-	// Stack the status bar under the left+gap column so its total height
-	// matches the sidebar (which spans the full terminal height).
 	leftFull := lipgloss.JoinVertical(lipgloss.Left, leftWithGap, statusView)
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, leftFull, sidebarBlock)

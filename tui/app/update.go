@@ -5,6 +5,19 @@ import (
 	"github.com/mrbryside/harness/tui/components"
 )
 
+// AutocompleteShowMsg is sent when the user types a slash command prefix.
+type AutocompleteShowMsg struct {
+	Prefix string
+}
+
+// AutocompleteHideMsg is sent when the slash command prefix is cleared.
+type AutocompleteHideMsg struct{}
+
+// AutocompleteSelectMsg is sent when the user selects a suggestion.
+type AutocompleteSelectMsg struct {
+	Command string
+}
+
 // Update is the main message handler. It dispatches to focused
 // handler methods so each file in app/ owns a single concern.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -29,6 +42,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleChunkMsg(msg)
 	case components.StatusMsg:
 		return m.handleStatusMsg(msg)
+	case AutocompleteShowMsg:
+		return m.handleAutocompleteShow(msg)
+	case AutocompleteHideMsg:
+		return m.handleAutocompleteHide()
+	case AutocompleteSelectMsg:
+		return m.handleAutocompleteSelect(msg)
 	}
 	return m, nil
 }

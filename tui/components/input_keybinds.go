@@ -15,6 +15,11 @@ func (i Input) handleKeyPress(msg tea.KeyPressMsg) (Input, tea.Cmd) {
 		return i.handleEsc()
 	}
 
+	// Drop CapsLock key (produces spurious "A" text).
+	if msg.Code == tea.KeyCapsLock {
+		return i, nil
+	}
+
 	// Drop Thai combining (eg. ( ่),( ้)) marks at start of buffer.
 	if i.textarea.Value() == "" && isCombiningMark(msg.Text) {
 		return i, nil
@@ -28,11 +33,21 @@ func (i Input) handleKeyPress(msg tea.KeyPressMsg) (Input, tea.Cmd) {
 		return i, cmd
 	}
 
-	// Up/Down browse history.
+	// Up/Down: navigate within text first; only browse history at edges.
 	if msg.Code == tea.KeyUp {
+		if i.textarea.Line() > 0 {
+			var cmd tea.Cmd
+			i.textarea, cmd = i.textarea.Update(msg)
+			return i, cmd
+		}
 		return i.handleHistoryUp()
 	}
 	if msg.Code == tea.KeyDown {
+		if i.textarea.Line() < i.textarea.LineCount()-1 {
+			var cmd tea.Cmd
+			i.textarea, cmd = i.textarea.Update(msg)
+			return i, cmd
+		}
 		return i.handleHistoryDown()
 	}
 

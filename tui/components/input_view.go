@@ -6,7 +6,7 @@ import (
 )
 
 func (i Input) View() string {
-	innerWidth := i.width - 3 // 1 accent col + 2 padding cols
+	innerWidth := i.width - 5 // 1 accent col + 4 padding cols (2 left + 2 right)
 	if innerWidth < 1 {
 		innerWidth = 1
 	}
@@ -26,7 +26,7 @@ func (i Input) View() string {
 
 	// Selection overlay applied before lipgloss width wrapper.
 	textareaBody := i.textarea.View()
-	textareaBody = i.sel.Overlay(textareaBody, 0, inputBgSGR)
+	textareaBody = i.sel.Overlay(textareaBody, 0, styles.PanelBgSGR)
 
 	body := lipgloss.NewStyle().
 		Background(styles.PanelBg).
@@ -40,21 +40,11 @@ func (i Input) View() string {
 
 	inner := lipgloss.JoinVertical(lipgloss.Left, body, spacer, footer)
 
-	padded := lipgloss.NewStyle().
+	return lipgloss.NewStyle().
 		Background(styles.PanelBg).
-		Padding(1, 1).
+		Padding(1, 2).
+		BorderStyle(lipgloss.Border{Left: "┃"}).
+		BorderLeft(true).
+		BorderForeground(styles.UserBorder).
 		Render(inner)
-
-	barHeight := lipgloss.Height(padded)
-	if barHeight < 1 {
-		barHeight = 1
-	}
-
-	bar := lipgloss.NewStyle().
-		Background(styles.UserBorder).
-		Width(1).
-		Height(barHeight).
-		Render("")
-
-	return lipgloss.JoinHorizontal(lipgloss.Top, bar, padded)
 }

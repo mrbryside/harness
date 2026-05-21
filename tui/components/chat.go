@@ -12,8 +12,9 @@ import (
 
 // chatMessage holds a single turn in the conversation.
 type chatMessage struct {
-	role    string // "user" or "assistant"
-	content string
+	role     string // "user" or "assistant"
+	content  string
+	rendered string // cached rendered output
 }
 
 // Chat is the scrollable message history component.
@@ -33,10 +34,10 @@ type Chat struct {
 
 func NewChat(width, height int) Chat {
 	vp := viewport.New(viewport.WithWidth(width), viewport.WithHeight(height))
-	vp.Style = lipgloss.NewStyle().Background(styles.Background)
+	vp.Style = lipgloss.NewStyle().Background(styles.ChatBackground)
 	vp.FillHeight = true
 	vp.MouseWheelEnabled = true
-	vp.MouseWheelDelta = 2
+	vp.MouseWheelDelta = 4
 	vp.SoftWrap = true
 
 	c := Chat{
@@ -53,7 +54,7 @@ func newMarkdownRenderer(width int) *glamour.TermRenderer {
 		width = 1
 	}
 	r, err := glamour.NewTermRenderer(
-		glamour.WithStandardStyle("dark"),
+		glamour.WithStylesFromJSONBytes([]byte(styles.MonokaiGlamourStyle)),
 		glamour.WithWordWrap(width),
 	)
 	if err != nil {

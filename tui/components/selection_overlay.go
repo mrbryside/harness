@@ -3,13 +3,15 @@ package components
 import (
 	"regexp"
 	"strings"
+
+	"github.com/mrbryside/harness/tui/styles"
 )
 
 // bgSgrRE matches any SGR segment that sets a background colour.
 var bgSgrRE = regexp.MustCompile(`(?:48;2;\d+;\d+;\d+|48;5;\d+|10[0-7]|4[0-79])`)
 
 // rewriteBgsToSelection replaces every background-setting segment with
-// SelectionBgSGR's payload. If the escape doesn't contain a BG segment
+// styles.SelectionBgSGR's payload. If the escape doesn't contain a BG segment
 // it's returned untouched.
 func rewriteBgsToSelection(esc string) string {
 	if !strings.HasPrefix(esc, "\x1b[") || !strings.HasSuffix(esc, "m") {
@@ -19,14 +21,14 @@ func rewriteBgsToSelection(esc string) string {
 	if body == "" {
 		return esc
 	}
-	const selPayload = "48;2;61;89;161"
+	const selPayload = "48;2;73;72;62"
 	if !bgSgrRE.MatchString(body) {
 		return esc
 	}
 	return "\x1b[" + bgSgrRE.ReplaceAllString(body, selPayload) + "m"
 }
 
-// WrapLineRange paints SelectionBgSGR over visible cells between start
+// WrapLineRange paints styles.SelectionBgSGR over visible cells between start
 // and end rune-columns, restoring bgSGR afterwards.
 func WrapLineRange(line string, start, end int, bgSGR string) string {
 	var sb strings.Builder
@@ -56,7 +58,7 @@ func WrapLineRange(line string, start, end int, bgSGR string) string {
 			if inside {
 				if esc == "\x1b[m" || esc == "\x1b[0m" {
 					sb.WriteString(esc)
-					sb.WriteString(SelectionBgSGR)
+					sb.WriteString(styles.SelectionBgSGR)
 					i = j + 1
 					if bgSGR != "" {
 						if remaining := string(runes[i:]); strings.HasPrefix(remaining, bgSGR) {
@@ -73,7 +75,7 @@ func WrapLineRange(line string, start, end int, bgSGR string) string {
 		}
 
 		if !inside && col == start {
-			sb.WriteString(SelectionBgSGR)
+			sb.WriteString(styles.SelectionBgSGR)
 			inside = true
 		}
 		if inside && !bgClosed && end >= 0 && col == end {

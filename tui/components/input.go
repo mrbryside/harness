@@ -36,7 +36,6 @@ type Input struct {
 	draft     string
 }
 
-const inputBgSGR = "\x1b[48;2;26;27;38m"
 const escDebounce = 1 * time.Second
 
 func NewInput(model string) Input {
@@ -79,6 +78,10 @@ func NewInput(model string) Input {
 
 func (i Input) Value() string  { return i.textarea.Value() }
 func (i *Input) Reset()        { i.textarea.Reset() }
+func (i *Input) SetValue(s string) {
+	i.textarea.SetValue(s)
+	i.textarea.SetCursorColumn(len(s))
+}
 func (i *Input) SetMode(m Mode) { i.mode = m }
 func (i Input) Mode() Mode     { return i.mode }
 func (i Input) Init() tea.Cmd  { return nil }

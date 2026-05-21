@@ -11,6 +11,24 @@ import (
 func (m Model) handleKeyboard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
+	// Autocomplete navigation takes precedence when active.
+	if m.autocomplete.Active() {
+		switch msg.Code {
+		case tea.KeyUp:
+			m.autocomplete.Prev()
+			return m, nil
+		case tea.KeyDown:
+			m.autocomplete.Next()
+			return m, nil
+		case tea.KeyEnter:
+			cmd, _ := m.autocomplete.Selected()
+			return m.handleAutocompleteSelect(AutocompleteSelectMsg{Command: cmd})
+		case tea.KeyEscape:
+			m.autocomplete.Hide()
+			return m, nil
+		}
+	}
+
 	switch msg.String() {
 	case "ctrl+c":
 		return m.handleCtrlC()
@@ -26,6 +44,11 @@ func (m Model) handleKeyboard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	m.input, cmd = m.input.Update(msg)
 	m = m.reflowChat()
+
+	// Check for slash commands after every keystroke.
+	model, _ := m.checkAutocomplete()
+	m = model.(Model)
+
 	return m, cmd
 }
 

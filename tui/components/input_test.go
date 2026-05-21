@@ -43,7 +43,7 @@ func TestInputTypedTextUsesThemeForeground(t *testing.T) {
 	}
 
 	view := m.View()
-	const fgSGR = "38;2;192;202;245"
+	const fgSGR = "38;2;248;248;242"
 	abcIdx := strings.Index(view, "abc")
 	if abcIdx < 0 {
 		t.Fatalf("expected typed text \"abc\" in view, got:\n%q", view)
