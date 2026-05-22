@@ -12,9 +12,14 @@ import (
 
 // chatMessage holds a single turn in the conversation.
 type chatMessage struct {
-	role     string // "user" or "assistant"
+	role     string // "user", "assistant", or "code_diff"
 	content  string
 	rendered string // cached rendered output
+
+	// codeDiff data — only used when role == "code_diff"
+	diffPath    string
+	diffOld     string
+	diffNew     string
 }
 
 // Chat is the scrollable message history component.

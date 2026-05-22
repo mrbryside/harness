@@ -64,8 +64,15 @@ func New(provider llm.LLMProvider) Model {
 		return suggestions
 	})
 
+	chat := components.NewChat(80, 20)
+	chat.AppendMessage("assistant", "I added a new rule to AGENTS.md:")
+	chat.AppendCodeDiff("AGENTS.md",
+		"7. **Mouse events stay inside the program.** `tea.WithMouseCellMotion()` is set in `main.go` so the terminal never scrolls — scroll goes to the chat viewport.",
+		"7. **Mouse events stay inside the program.** `tea.WithMouseCellMotion()` is set in `main.go` so the terminal never scrolls — scroll goes to the chat viewport.\n8. **Diff backgrounds use lipgloss.** When rendering highlighted diff lines, use `lipgloss.NewStyle().Background(color).Width(w).Render(content)` instead of manual space padding to avoid soft-wrap artifacts.",
+	)
+
 	return Model{
-		chat:         components.NewChat(80, 20),
+		chat:         chat,
 		input:        components.NewInput(provider.Name()),
 		sidebar:      components.NewSidebar(provider.Name()),
 		statusbar:    components.NewStatusBar(),

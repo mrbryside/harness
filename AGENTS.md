@@ -4,16 +4,15 @@
 
 Same as before — TDD is mandatory, and the same general process applies:
 
-1. Read this file and `docs/learn/` to understand the project.
+1. Read this file to understand the project.
 2. Before changing code, understand which package / component the change belongs to (see the structure below).
 3. **Never write production code without first writing a failing test.** The test must fail before the implementation is written, and pass after.
 4. After a meaningful change, run `go build ./...` and `go test ./...` to confirm nothing regressed.
-5. Update or create docs in `docs/learn/` when behavior or architecture changes in a user-visible way.
+5. Update or create docs when behavior or architecture changes in a user-visible way.
 
 The project no longer uses `docs/tui-plan.md` or `docs/tasks/*.md` as the
 source of work — this is now a maintained, evolving codebase. Work is driven
-by user requests; agents should consult `docs/learn/` to ground themselves
-before making changes.
+by user requests.
 
 ---
 
@@ -22,9 +21,7 @@ before making changes.
 A terminal UI (TUI) for chatting with LLM providers, similar to OpenCode /
 Claude Code in appearance. Built in Go.
 
-The deepest, most up-to-date reference is **`docs/learn/`**. Start with
-`docs/learn/README.md`, then drill into the topic you need. This file is the
-short version that an agent must internalize before touching code.
+This file is the short version that an agent must internalize before touching code.
 
 > **Agent-specific docs** live in `docs/ai/`. Read them **only when necessary**
 > — i.e. when the task at hand requires it. Do not read proactively.
@@ -68,7 +65,6 @@ short version that an agent must internalize before touching code.
 │    theme.go      — every color used in the app       │
 │    chat_style.go — glamour JSON theme generator      │
 ├──────────────────────────────────────────────────────┤
-│  docs/learn/   — long-form architecture & recipes    │
 │  docs/ai/      — agent-specific guidance (read only  │
 │                  when necessary)                     │
 └──────────────────────────────────────────────────────┘
@@ -244,11 +240,71 @@ Test: `TestChatStripsInlineCodeBackground`.
 
 ---
 
+## Code Diff Full-Width Backgrounds
 
-- **Adding a UI piece?** Read `docs/learn/04-components.md` + `06-recipes.md`.
-- **Changing visuals?** Read `docs/learn/03-layout-and-styling.md`.
-- **Working on streaming or providers?** Read `docs/learn/05-llm-and-streaming.md`.
-- **Building popups / auto-complete?** Read `docs/learn/08-popups-and-overlays.md`.
-- **Adding a modal or new view (Ctrl+P palette, settings page, …)?** Read `docs/learn/09-views-and-routing.md`.
-- **Touching the input (slash commands, history, scrolling, validation)?** Read `docs/learn/10-input-patterns.md`.
-- **Looking up a term?** `docs/learn/07-glossary.md`.
+When rendering syntax-highlighted diff lines (via chroma) with a solid
+background that must span the full viewport width, **do not manually pad
+with spaces** — the viewport's soft-wrap will split the padding onto
+wrapped continuation lines and the background will break.
+
+Instead, let lipgloss handle width + padding:
+
+```go
+style := lipgloss.NewStyle().
+    Background(lipgloss.Color(bgHex)).
+    Width(targetWidth)
+return style.Render(content)
+```
+
+Lipgloss correctly measures the visible width of strings that already
+contain ANSI escape sequences (e.g. chroma output) and pads with spaces
+that inherit the style's background colour. This avoids wrapping
+artifacts and keeps the background flush to the right edge.
+
+Used in: `components/chat_message_code_diff.go:applyLineBackground`.
+
+---
+
+## Code Diff Component Architecture
+
+### Overview
+The code diff component (`components/chat_message_code_diff.go`) renders unified diffs with syntax highlighting and full-width line backgrounds. It supports both full-file diffs and snippet-based diffs with context lines.
+
+### Key Features
+- **Real line numbers**: Reads the actual file to display correct line numbers
+- **Context lines**: Shows 5 lines of context above and below changes
+- **Syntax highlighting**: Uses chroma with a custom theme (`diffChromaStyle`)
+- **Full-width backgrounds**: Line backgrounds extend to viewport edge via lipgloss `Width()`
+- **Soft-wrap handling**: Long lines are manually wrapped with ANSI preservation
+- **Git-style markers**: `+` for additions (green), `-` for removals (red)
+
+### Layout
+```
+[4 char line num] [1 space] [1 char marker] [1 space] [content...]
+```
+- Total prefix: 7 characters
+- Content width: `c.width - 7`
+- Continuation lines indent 7 spaces to align with content column
+
+### Color Scheme
+- **Context lines**: `styles.Background` (#141414) bg, white text
+- **Add lines**: `#2c3c2c` bg (dark green), `#6bff6b` text (green)
+- **Remove lines**: `#3c2c2c` bg (dark red), `#ff6b6b` text (red)
+- **Line numbers**: Context uses `styles.SidebarValue`, add/remove use matching colors
+
+### API
+```go
+// Full file diff with context
+chat.AppendCodeDiff("path/to/file.go", oldContent, newContent)
+
+// Direct render (used internally)
+chat.RenderCodeDiff(path, oldContent, newContent)
+```
+
+### Important Notes
+- The component reads the actual file to determine real line numbers
+- If file not found or oldContent not matched, falls back to simple diff (no line numbers)
+- Background colors are applied via lipgloss `Width(c.width)` to ensure full coverage
+- Manual ANSI-aware wrapping prevents viewport soft-wrap from breaking backgrounds
+
+---

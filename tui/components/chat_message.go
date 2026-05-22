@@ -18,6 +18,17 @@ func (c *Chat) AppendMessage(role, content string) {
 	c.refresh()
 }
 
+// AppendCodeDiff adds a code-diff message to the history.
+func (c *Chat) AppendCodeDiff(path, oldContent, newContent string) {
+	c.messages = append(c.messages, chatMessage{
+		role:     "code_diff",
+		diffPath: path,
+		diffOld:  oldContent,
+		diffNew:  newContent,
+	})
+	c.refresh()
+}
+
 // AppendChunk appends streamed text to the last message.
 // Optimised: only re-renders the last assistant message; earlier messages
 // use their cached rendered string.
@@ -68,8 +79,12 @@ func (c *Chat) ShowToast(msg string, d time.Duration) tea.Cmd {
 }
 
 func (c *Chat) renderMessage(msg chatMessage) string {
-	if msg.role == "user" {
+	switch msg.role {
+	case "user":
 		return c.renderUserMessage(msg)
+	case "code_diff":
+		return c.renderCodeDiffMessage(msg)
+	default:
+		return c.renderAssistantMessage(msg)
 	}
-	return c.renderAssistantMessage(msg)
 }
