@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Complete Stream Assembly Explained</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: #0a0a0a;
+            color: #e0e0e0;
+            line-height: 1.7;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+        h1 {
+            font-size: 28px;
+            color: #fff;
+            margin-bottom: 8px;
+        }
+        .subtitle {
+            color: #888;
+            font-size: 14px;
+            margin-bottom: 40px;
+        }
+        .section {
+            margin-bottom: 50px;
+        }
+        .section-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid #333;
+        }
+        .section-title .icon {
+            font-size: 28px;
+        }
+        .explanation-box {
+            background: #141414;
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+        .explanation-box h3 {
+            font-size: 16px;
+            color: #fff;
+            margin-bottom: 12px;
+        }
+        .explanation-box p {
+            color: #aaa;
+            font-size: 14px;
+            margin-bottom: 12px;
+        }
+        .big-idea {
+            background: #1a1a3a;
+            border: 2px solid #3a3a6a;
+            border-radius: 12px;
+            padding: 24px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        .big-idea .label {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #7a7ada;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+        .big-idea .text {
+            font-size: 20px;
+            color: #fff;
+            font-weight: 700;
+        }
+        .json-block {
+            background: #0a0a0a;
+            border: 1px solid #222;
+            border-radius: 6px;
+            padding: 16px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+            color: #aaa;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+            margin: 12px 0;
+        }
+        .json-key { color: #9cdcfe; }
+        .json-string { color: #ce9178; }
+        .json-number { color: #b5cea8; }
+        .highlight-blue { background: #0f0f1f; border-color: #2a2a5a; }
+        .highlight-green { background: #0f1f0f; border-color: #2a5a2a; }
+        .highlight-orange { background: #1f1a0f; border-color: #5a4a2a; }
+        .highlight-purple { background: #1f0f1f; border-color: #5a2a5a; }
+        .visual-diagram {
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+            margin: 24px 0;
+            border: 1px solid #333;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .diagram-step {
+            padding: 20px;
+            background: #141414;
+            border-bottom: 1px solid #222;
+        }
+        .diagram-step:last-child { border-bottom: none; }
+        .diagram-step .step-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .diagram-step .step-desc {
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 12px;
+        }
+        .arrow-down {
+            text-align: center;
+            color: #555;
+            font-size: 24px;
+            padding: 8px 0;
+            background: #0a0a0a;
+        }
+        .compare-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 13px;
+        }
+        .compare-table th {
+            text-align: left;
+            padding: 14px 12px;
+            background: #1a1a1a;
+            color: #fff;
+            font-weight: 600;
+            border-bottom: 2px solid #333;
+        }
+        .compare-table td {
+            padding: 14px 12px;
+            border-bottom: 1px solid #1a1a1a;
+            color: #aaa;
+            vertical-align: top;
+        }
+        .compare-table tr:hover td { background: #0f0f0f; }
+        .compare-table .type-label {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+        .type-label.content { background: #0f1f0f; color: #7ada7a; }
+        .type-label.reasoning { background: #0f0f1f; color: #7a7ada; }
+        .type-label.tool { background: #1f0f0f; color: #da7a7a; }
+        .code-fragment {
+            display: inline-block;
+            background: #1a1a1a;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 12px;
+            color: #ce9178;
+        }
+        .timeline {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin: 20px 0;
+        }
+        .timeline-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 16px;
+            padding: 20px;
+            background: #0f0f0f;
+            border: 1px solid #1a1a1a;
+            border-radius: 8px;
+        }
+        .timeline-badge {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+        .timeline-badge.content { background: #0f1f0f; color: #7ada7a; border: 2px solid #2a5a2a; }
+        .timeline-badge.reasoning { background: #0f0f1f; color: #7a7ada; border: 2px solid #2a2a5a; }
+        .timeline-badge.tool { background: #1f0f0f; color: #da7a7a; border: 2px solid #5a2a2a; }
+        .timeline-badge.finish { background: #1a1a1a; color: #aaa; border: 2px solid #555; }
+        .timeline-content { flex: 1; }
+        .timeline-content .type {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+        .timeline-content .type.content { color: #7ada7a; }
+        .timeline-content .type.reasoning { color: #7a7ada; }
+        .timeline-content .type.tool { color: #da7a7a; }
+        .timeline-content .type.finish { color: #aaa; }
+        .final-assembly {
+            background: #0f0f0f;
+            border: 2px solid #444;
+            border-radius: 12px;
+            padding: 24px;
+            margin: 24px 0;
+        }
+        .final-assembly .title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 16px;
+            text-align: center;
+        }
+        .note {
+            background: #1a1a2e;
+            border-left: 3px solid #4a9eff;
+            padding: 16px;
+            margin: 20px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        .note p {
+            color: #aaa;
+            font-size: 13px;
+        }
+        .note strong { color: #fff; }
+        .scenario-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+        .scenario-tab {
+            padding: 10px 20px;
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 8px;
+            color: #888;
+            font-size: 13px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .scenario-tab:hover { border-color: #555; }
+        .scenario-tab.active { background: #1e3a5f; color: #6ab2ff; border-color: #2a5a8f; }
+        .scenario-content { display: none; }
+        .scenario-content.active { display: block; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Complete Stream Assembly Explained</h1>
+        <p class="subtitle">All parts need assembly: Content, Reasoning, and Tool Calls</p>
+        
+        <div class="section">
+            <div class="big-idea">
+                <div class="label">Key Question</div>
+                <div class="text">
+                    "Do we only assemble tool calls?"
+                    <br>
+                    <span style="font-size: 16px; color: #da7a7a;">No! Everything must be assembled!</span>
+                </div>
+            </div>
+            
+            <div class="explanation-box">
+                <h3>What needs assembly in a stream?</h3>
+                <p>In <span class="code-fragment">choices[0].delta</span>, you may see these three types mixed together:</p>
+                
+                <table class="compare-table">
+                    <tr>
+                        <th style="width: 20%">Field</th>
+                        <th style="width: 25%">Assembly Method</th>
+                        <th style="width: 55%">Description</th>
+                    </tr>
+                    <tr>
+                        <td>
+                            <span class="type-label content">content</span><br>
+                            <span style="font-size: 11px; color: #888;">Response text</span>
+                        </td>
+                        <td><span class="code-fragment">content += delta.content</span></td>
+                        <td>Simple string concatenation (like normal chat)</td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <span class="type-label reasoning">reasoning_content</span><br>
+                            <span style="font-size: 11px; color: #888;">Thinking</span>
+                        </td>
+                        <td><span class="code-fragment">reasoning += delta.reasoning_content</span></td>
+                        <td>Same as content but internal thoughts (always before content)</td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <span class="type-label tool">tool_calls</span><br>
+                            <span style="font-size: 11px; color: #888;">Tool calls</span>
+                        </td>
+                        <td><span class="code-fragment">map[index] += arguments</span></td>
+                        <td>Most complex! Use map by index and append arguments (see other page)</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        
+        <div class="section">
+            <div class="section-title">
+                <span class="icon">🔄</span>
+                Full Flow: How to Assemble Response?
+            </div>
+            
+            <div class="visual-diagram">
+                <div class="diagram-step">
+                    <div class="step-title">📤 Step 1: Create Empty Assistant Message</div>
+                    <div class="step-desc">Create empty structure to receive stream data</div>
+                    <div class="json-block">
+assistantMessage = {
+  role: "assistant",
+  content: "",       // waiting for content chunks
+  reasoning_content: "",  // waiting for reasoning chunks
+  tool_calls: []     // waiting for tool call chunks
+}
+
+toolCallBuffer = {}  // map to store tool calls during stream
+                    </div>
+                </div>
+                
+                <div class="arrow-down">⬇</div>
+                
+                <div class="diagram-step">
+                    <div class="step-title">📥 Step 2: Read Each Chunk from Stream</div>
+                    <div class="step-desc">Each chunk comes as SSE (Server-Sent Events)</div>
+                    <div class="json-block">
+// Example chunk 1
+data: {
+  "choices": [{
+    "index": 0,
+    "delta": {
+      "role": "assistant",    // only comes once
+      "reasoning_content": "Let"  // starts thinking
+    },
+    "finish_reason": null
+  }]
+}
+                    </div>
+                </div>
+                
+                <div class="arrow-down">⬇</div>
+                
+                <div class="diagram-step">
+                    <div class="step-title">🔨 Step 3: Assemble Each Part</div>
+                    <div class="step-desc">Check what's in delta and append accordingly</div>
+                    <div class="json-block">
+for each chunk in stream:
+  delta = chunk.choices[0].delta
+  
+  // 3.1 Assemble CONTENT (if present)
+  if delta.content exists:
+    assistantMessage.content += delta.content
+    // "H" + "ello" + "!" → "Hello!"
+  
+  // 3.2 Assemble REASONING (if present)
+  if delta.reasoning_content exists:
+    assistantMessage.reasoning_content += delta.reasoning_content
+    // "Let" + " me" + " think" → "Let me think"
+  
+  // 3.3 Assemble TOOL CALLS (if present - most complex)
+  if delta.tool_calls exists:
+    for each tc in delta.tool_calls:
+      idx = tc.index
+      if toolCallBuffer[idx] not exists:
+        toolCallBuffer[idx] = { id, type, function: { name, arguments: "" } }
+      toolCallBuffer[idx].function.arguments += tc.function.arguments
+      // Append arguments piece by piece!
+                    </div>
+                </div>
+                
+                <div class="arrow-down">⬇</div>
+                
+                <div class="diagram-step">
+                    <div class="step-title">✅ Step 4: Stream Ends: Convert to Complete Message</div>
+                    <div class="step-desc">When finish_reason is not null, stream is done</div>
+                    <div class="json-block">
+// Convert toolCallBuffer to array
+for i from 0 to len(toolCallBuffer) - 1:
+  assistantMessage.tool_calls.push(toolCallBuffer[i])
+
+// Now assistantMessage has complete data:
+{
+  role: "assistant",
+  content: "Hello! How can I help?",
+  reasoning_content: "Let me think...",
+  tool_calls: [ { id: "call_abc", function: { name: "bash", arguments: "{...}" } }]
+}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        
+        <div class="section">
+            <div class="section-title">
+                <span class="icon">🎭</span>
+                3 Scenarios: What Streams Come?
+            </div>
+            
+            <div class="scenario-tabs">
+                <button class="scenario-tab active" onclick="switchScenario('content')">💬 Content Only</button>
+                <button class="scenario-tab" onclick="switchScenario('reasoning')">💭 Reasoning + Content</button>
+                <button class="scenario-tab" onclick="switchScenario('tool')">🔧 Tool Call</button>
+                <button class="scenario-tab" onclick="switchScenario('mixed')">🌊 Mixed (Everything)</button>
+            </div>
+            
+            
+            <div id="content" class="scenario-content active">
+                <div class="explanation-box">
+                    <h3>Scenario: AI responds with normal text (no reasoning, no tool)</h3>
+                    <p><strong>User:</strong> "Hello!"</p>
+                    <p><strong>What streams:</strong> Only <span class="code-fragment">delta.content</span></p>
+                </div>
+                
+                <div class="timeline">
+                    <div class="timeline-item">
+                        <div class="timeline-badge content">1</div>
+                        <div class="timeline-content">
+                            <div class="type content">content</div>
+                            <div class="json-block">{ "delta": { "role": "assistant", "content": "Hello" } }</div>
+                            <p style="font-size: 12px; color: #888;">content = "Hello"</p>
+                        </div>
+                    </div>
+                    
+                    <div class="timeline-item">
+                        <div class="timeline-badge content">2</div>
+                        <div class="timeline-content">
+                            <div class="type content">content</div>
+                            <div class="json-block">{ "delta": { "content": "!" } }</div>
+                            <p style="font-size: 12px; color: #888;">content = "Hello!" (appended)</p>
+                        </div>
+                    </div>
+                    
+                    <div class="timeline-item">
+                        <div class="timeline-badge finish">3</div>
+                        <div class="timeline-content">
+                            <div class="type finish">finish</div>
+                            <div class="json-block">{ "delta": {}, "finish_reason": "stop" }</div>
+                            <p style="font-size: 12px; color: #888;">Stream done! Got "Hello!" complete</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="final-assembly">
+                    <div class="title">✅ Final Result (content only)</div>
+                    <div class="json-block highlight-green">
+{
+  role: "assistant",
+  content: "Hello!",
+  reasoning_content: "",  // empty
+  tool_calls: []         // empty
+}
+                    </div>
+                </div>
+            </div>
+            
+            
+            <div id="reasoning" class="scenario-content">
+                <div class="explanation-box">
+                    <h3>Scenario: AI thinks before responding (Reasoning Model like o1, QwQ)</h3>
+                    <p><strong>User:</strong> "What is 15 × 24?"</p>
+                    <p><strong>What streams:</strong> <span class="code-fragment">delta.reasoning_content</span> first, then <span class="code-fragment">delta.content</span></p>
+                    <p><strong>Order:</strong> Reasoning (multiple chunks) → Content (multiple chunks) → Finish</p>
+                </div>
+                
+                <div class="timeline">
+                    <div class="timeline-item">
+                        <div class="timeline-badge reasoning">1</div>
+                        <div class="timeline-content">
+                            <div class="type reasoning">reasoning_content</div>
+                            <div class="json-block highlight-blue">{ "delta": { "role": "assistant", "reasoning_content": "Let" } }</div>
+                            <p style="font-size: 12px; color: #888;">reasoning = "Let"</p>
+                        </div>
+                    </div>
+                    
+                    <div class="timeline-item">
+                        <div class="timeline-badge reasoning">2</div>
+                        <div class="timeline-content">
+                            <div class="type reasoning">reasoning_content</div>
+                            <div class="json-block highlight-blue">{ "delta": { "reasoning_content": " me calculate" } }</div>
+                            <p style="font-size: 12px; color: #888;">reasoning = "Let me calculate"</p>
+                        </div>
+                    </div>
+                    
+                    <div class="timeline-item">
+                        <div class="timeline-badge reasoning">3</div>
+                        <div class="timeline-content">
+                            <div class="type reasoning">reasoning_content</div>
+                            <div class="json-block highlight-blue">{ "delta": { "reasoning_content": "... 15 x 20 = 300, 15 x 4 = 60..." } }</div>
+                            <p style="font-size: 12px; color: #888;">reasoning = "Let me calculate... 15 x 20 = 300, 15 x 4 = 60..."</p>
+                        </div>
+                    </div>
+                    
+                    <div class="timeline-item">
+                        <div class="timeline-badge content">4</div>
+                        <div class="timeline-content">
+                            <div class="type content">content (starts after reasoning)</div>
+                            <div class="json-block highlight-green">{ "delta": { "content": "15" } }</div>
+                            <p style="font-size: 12px; color: #888;">content = "15" (reasoning stopped, now content)</p>
+                        </div>
+                    </div>
+                    
+                    <div class="timeline-item">
+                        <div class="timeline-badge content">5</div>
+                        <div class="timeline-content">
+                            <div class="type content">content</div>
+                            <div class="json-block highlight-green">{ "delta": { "content": " x 24 = 360" } }</div>
+                            <p style="font-size: 12px; color: #888;">content = "15 x 24 = 360"</p>
+                        </div>
+                    </div>
+                    
+                    <div class="timeline-item">
+                        <div class="timeline-badge finish">6</div>
+                        <div class="timeline-content">
+                            <div class="type finish">finish</div>
+                            <div class="json-block">{ "delta": {}, "finish_reason": "stop" }</div>
+                            <p style="font-size: 12px; color: #888;">Stream done!</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="final-assembly">
+                    <div class="title">✅ Final Result (both reasoning + content)</div>
+                    <div class="json-block">
+{
+  role: "assistant",
+  content: "15 x 24 = 360",              // what user sees
+  reasoning_content: "Let me calculate... 15 x 20 = 300, 15 x 4 = 60...",  // AI's thoughts (hidden)
+  tool_calls: []                            // empty (no tools)
+}
+                    </div>
+                </div>
+                
+                <div class="note">
+                    <p><strong>Notice:</strong> <span class="code-fragment">reasoning_content</span> comes <strong>before</strong> <span class="code-fragment">content</span>! They don't come together.</p>
+                </div>
+            </div>
+            
+            
+            <div id="tool" class="scenario-content">
+                <div class="explanation-box">
+                    <h3>Scenario: AI uses Tool (as explained in explain-tools-stream.html)</h3>
+                    <p><strong>User:</strong> "List files"</p>
+                    <p><strong>What streams:</strong> <span class="code-fragment">delta.tool_calls</span> in multiple chunks (built piece by piece)</p>
+                    <p><strong>No content!</strong> Because AI doesn't text back, but calls tool instead.</p>
+                </div>
+                
+                <div class="timeline">
+                    <div class="timeline-item">
+                        <div class="timeline-badge tool">1</div>
+                        <div class="timeline-content">
+                            <div class="type tool">tool_calls (init)</div>
+                            <div class="json-block highlight-purple">{ "delta": { "tool_calls": [{ "index": 0, "id": "call_abc", "function": { "name": "bash", "arguments": "" } }] } }</div>
+                            <p style="font-size: 12px; color: #888;">buffer[0] = {id: "call_abc", name: "bash", arguments: ""}</p>
+                        </div>
+                    </div>
+                    
+                    <div class="timeline-item">
+                        <div class="timeline-badge tool">2</div>
+                        <div class="timeline-content">
+                            <div class="type tool">tool_calls (build args)</div>
+                            <div class="json-block highlight-purple">{ "delta": { "tool_calls": [{ "index": 0, "function": { "arguments": "{\"command\":\"ls" } }] } }</div>
+                            <p style="font-size: 12px; color: #888;">arguments += '{"command":"ls' → buffer[0].arguments = '{"command":"ls'</p>
+                        </div>
+                    </div>
+                    
+                    <div class="timeline-item">
+                        <div class="timeline-badge tool">3</div>
+                        <div class="timeline-content">
+                            <div class="type tool">tool_calls (build args)</div>
+                            <div class="json-block highlight-purple">{ "delta": { "tool_calls": [{ "index": 0, "function": { "arguments": " -la\"}" } }] } }</div>
+                            <p style="font-size: 12px; color: #888;">arguments += ' -la"}' → buffer[0].arguments = '{"command":"ls -la"}' ✅</p>
+                        </div>
+                    </div>
+                    
+                    <div class="timeline-item">
+                        <div class="timeline-badge finish">4</div>
+                        <div class="timeline-content">
+                            <div class="type finish">finish</div>
+                            <div class="json-block">{ "delta": {}, "finish_reason": "tool_calls" }</div>
+                            <p style="font-size: 12px; color: #888;">Stream done! content is empty but has tool_calls</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="final-assembly">
+                    <div class="title">✅ Final Result (has tool_calls but no content)</div>
+                    <div class="json-block">
+{
+  role: "assistant",
+  content: null,   // null! No text response
+  reasoning_content: "",  // empty
+  tool_calls: [{        // has tool calls
+    id: "call_abc",
+    type: "function",
+    function: { name: "bash", arguments: '{"command":"ls -la"}' }
+  }] // assembled from 3 chunks
+}
+                    </div>
+                </div>
+            </div>
+            
+            
+            <div id="mixed" class="scenario-content">
+                <div class="explanation-box">
+                    <h3>Scenario: Everything Mixed! (Most Complex)</h3>
+                    <p><strong>User:</strong> "Search for files and tell me what you find"</p>
+                    <p><strong>What streams:</strong> <span style="color: #da7a7a;">Reasoning → Tool Call → (wait for result) → Content</span></p>
+                    <p>This is what you see in our AI-POC app!</p>
+                </div>
+                
+                <div class="timeline">
+                    <div class="timeline-item">
+                        <div class="timeline-badge reasoning">1-5</div>
+                        <div class="timeline-content">
+                            <div class="type reasoning">Phase 1: Reasoning</div>
+                            <div class="json-block highlight-blue">
+{ "delta": { "role": "assistant", "reasoning_content": "The user wants" } }
+{ "delta": { "reasoning_content": " me to search" } }
+{ "delta": { "reasoning_content": " for files." } }
+                            </div>
+                            <p style="font-size: 12px; color: #888;">reasoning = "The user wants me to search for files."</p>
+                        </div>
+                    </div>
+                    
+                    <div class="timeline-item">
+                        <div class="timeline-badge tool">6-10</div>
+                        <div class="timeline-content">
+                            <div class="type tool">Phase 2: Tool Call (built piece by piece)</div>
+                            <div class="json-block highlight-purple">
+{ "delta": { "tool_calls": [{ "index": 0, "id": "call_xyz", "function": { "name": "find", "arguments": "" } }] } }
+{ "delta": { "tool_calls": [{ "index": 0, "function": { "arguments": "{\"path\":\".\"" } }] } }
+{ "delta": { "tool_calls": [{ "index": 0, "function": { "arguments": ",\"pattern\":\"*\"}" } }] } }
+                            </div>
+                            <p style="font-size: 12px; color: #888;">arguments accumulated: "{\"path\":\".\",\"pattern\":\"*\"}" → Assembly complete!</p>
+                        </div>
+                    </div>
+                    
+                    <div class="timeline-item">
+                        <div class="timeline-badge finish">11</div>
+                        <div class="timeline-content">
+                            <div class="type finish">Phase 2 done: tool_calls finish</div>
+                            <div class="json-block">{ "delta": {}, "finish_reason": "tool_calls" }</div>
+                            <p style="font-size: 12px; color: #888;"><strong>Round 1 done!</strong> Must execute tool and send result back</p>
+                        </div>
+                    </div>
+                    
+                    <div class="timeline-item" style="background: #0f1f0f; border-color: #2a5a2a;">
+                        <div class="timeline-badge content">PAUSE</div>
+                        <div class="timeline-content">
+                            <div class="type content">⏸️ Pause here! Must execute tool first</div>
+                            <p style="font-size: 13px; color: #7ada7a;"><strong>Middle steps:</strong></p>
+                            <p style="font-size: 12px; color: #aaa;">1. Execute tool: find(path=".", pattern="*")</p>
+                            <p style="font-size: 12px; color: #aaa;">2. Got result: ["main.go", "README.md", "go.mod"]</p>
+                            <p style="font-size: 12px; color: #aaa;">3. Send result back in messages array with role: "tool"</p>
+                        </div>
+                    </div>
+                    
+                    <div class="timeline-item">
+                        <div class="timeline-badge content">12-15</div>
+                        <div class="timeline-content">
+                            <div class="type content">Phase 3: Content (after getting result)</div>
+                            <div class="json-block highlight-green">
+{ "delta": { "content": "I found" } }
+{ "delta": { "content": " 3 files:" } }
+{ "delta": { "content": " main.go, README.md, go.mod" } }
+                            </div>
+                            <p style="font-size: 12px; color: #888;">content = "I found 3 files: main.go, README.md, go.mod"</p>
+                        </div>
+                    </div>
+                    
+                    <div class="timeline-item">
+                        <div class="timeline-badge finish">16</div>
+                        <div class="timeline-content">
+                            <div class="type finish">Phase 3 done: stop</div>
+                            <div class="json-block">{ "delta": {}, "finish_reason": "stop" }</div>
+                            <p style="font-size: 12px; color: #888;">Round 2 done! Complete answer received.</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="final-assembly">
+                    <div class="title">✅ Full Conversation (2 rounds)</div>
+                    <div class="json-block">
+// Round 1: User asks → AI requests tool
+messages = [
+  { role: "user", content: "Search for files..." },
+  { // AI responds (assembled from stream)
+    role: "assistant",
+    content: null,
+    reasoning_content: "The user wants me to search...",
+    tool_calls: [{ id: "call_xyz", function: { name: "find", arguments: "{...}" } }]
+  },
+  { // Tool result (we send back)
+    role: "tool",
+    tool_call_id: "call_xyz",
+    content: "[main.go, README.md, go.mod]"
+  },
+  { // Round 2: AI responds after result (assembled from stream again)
+    role: "assistant",
+    content: "I found 3 files: main.go, README.md, go.mod",
+    reasoning_content: "",
+    tool_calls: []
+  }
+]
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        
+        <div class="section">
+            <div class="section-title">
+                <span class="icon">✨</span>
+                Final Answer
+            </div>
+            
+            <div class="big-idea">
+                <div class="label">Answer</div>
+                <div class="text">
+                    "The entire response must be assembled!"
+                    <br>
+                    <span style="font-size: 16px; color: #aaa;">Not just tool calls, but content and reasoning also accumulate from chunks</span>
+                </div>
+            </div>
+            
+            <div class="explanation-box">
+                <h3>Summary of Each Assembly Type</h3>
+                
+                <table class="compare-table">
+                    <tr>
+                        <th>Scenario</th>
+                        <th>What to assemble</th>
+                        <th>Difficulty</th>
+                    </tr>
+                    <tr>
+                        <td>💬 Content Only</td>
+                        <td><span class="code-fragment">content += delta.content</span></td>
+                        <td>⭐ Easy</td>
+                    </tr>
+                    <tr>
+                        <td>💭 Reasoning + Content</td>
+                        <td><span class="code-fragment">reasoning += delta.reasoning_content</span> then <span class="code-fragment">content += delta.content</span></td>
+                        <td>⭐⭐ Medium</td>
+                    </tr>
+                    <tr>
+                        <td>🔧 Tool Calls</td>
+                        <td><span class="code-fragment">map[index] += arguments</span> (object accumulation)</td>
+                        <td>⭐⭐⭐ Hard</td>
+                    </tr>
+                    <tr>
+                        <td>🌊 Mixed (Everything)</td>
+                        <td>All combined + handle <span class="code-fragment">finish_reason</span> too</td>
+                        <td>⭐⭐⭐⭐ Complex</td>
+                    </tr>
+                </table>
+            </div>
+            
+            <div class="note">
+                <p><strong>Rule of Thumb:</strong> In Stream mode (<span class="code-fragment">stream: true</span>) <span style="color: #da7a7a;">everything comes in small pieces!</span> Nothing comes complete in one go (except <span class="code-fragment">role</span> which comes once in the first chunk)</p>
+                <p style="margin-top: 8px;">- <strong>Content</strong> → Concatenate strings</p>
+                <p>- <strong>Reasoning</strong> → Concatenate strings</p>
+                <p>- <strong>Tool Calls</strong> → Concatenate argument strings but use map to store objects</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function switchScenario(scenario) {
+            document.querySelectorAll('.scenario-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.scenario-content').forEach(c => c.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(scenario).classList.add('active');
+        }
+    </script>
+</body>
+</html>

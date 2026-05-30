@@ -56,6 +56,13 @@ func (i Input) handleKeyPress(msg tea.KeyPressMsg) (Input, tea.Cmd) {
 		return i.handleEnter(msg)
 	}
 
+	// Left/Right: cursor movement while browsing history — do NOT reset.
+	if msg.Code == tea.KeyLeft || msg.Code == tea.KeyRight {
+		var cmd tea.Cmd
+		i.textarea, cmd = i.textarea.Update(msg)
+		return i, cmd
+	}
+
 	// Any other key while browsing history → reset cursor.
 	if i.history != nil && i.history.Cursor() >= 0 {
 		i.history.ResetCursor()

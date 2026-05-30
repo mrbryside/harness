@@ -1,6 +1,7 @@
 package components
 
 import (
+	"bufio"
 	"fmt"
 	"image/color"
 	"os"
@@ -15,8 +16,12 @@ import (
 	"github.com/mrbryside/harness/tui/styles"
 )
 
+// diffContainerOverhead is the number of columns consumed by the diff
+// container's left border (1) + left padding (2).
+const diffContainerOverhead = 3
+
 func (c *Chat) renderCodeDiffMessage(msg chatMessage) string {
-	return c.RenderCodeDiff(msg.diffPath, msg.diffOld, msg.diffNew) + messageGap
+	return c.RenderCodeDiffV2(msg.diffPath, msg.diffOld, msg.diffNew, msg.diffStart) + messageGap
 }
 
 // diffChromaStyle is a custom chroma style that matches the app theme.
@@ -37,86 +42,38 @@ var diffChromaStyle = func() *chroma.Style {
 	return style
 }()
 
-// RenderCodeDiff renders a unified diff view with syntax highlighting in git style.
-// It reads the file at path, locates oldContent within it, grabs 5 lines of context
-// above and below, and renders the replacement against newContent with correct line numbers.
-func (c *Chat) RenderCodeDiff(path string, oldContent, newContent string) string {
-	// Try to read the actual file so we can show real line numbers.
-	fileBytes, err := os.ReadFile(path)
-	if err != nil {
-		return c.renderSimpleDiff(path, oldContent, newContent)
-	}
-	fileContent := string(fileBytes)
+// renderSimpleDiff is the fallback when the file can't be read or oldContent isn't found.
+// startLine is the 1-based line number where oldContent starts in the file.
+func (c *Chat) renderSimpleDiff(path string, oldContent, newContent string, startLine int) string {
+	oldRaw := strings.Split(oldContent, "\n")
+	newRaw := strings.Split(newContent, "\n")
+	diffLines := computeRawDiff(oldRaw, newRaw, 3)
 
-	// Find oldContent in the file (assume exactly 1 match).
-	matchIdx := strings.Index(fileContent, oldContent)
-	if matchIdx == -1 {
-		return c.renderSimpleDiff(path, oldContent, newContent)
-	}
-
-	fileLines := strings.Split(fileContent, "\n")
-	oldLines := strings.Split(oldContent, "\n")
-	newLines := strings.Split(newContent, "\n")
-
-	// Locate the start line of oldContent in the file.
-	startLine := 0
-	charCount := 0
-	for i, line := range fileLines {
-		lineEnd := charCount + len(line)
-		if matchIdx >= charCount && matchIdx < lineEnd+1 { // +1 for the newline
-			startLine = i
-			break
-		}
-		charCount = lineEnd + 1 // +1 for \n
-	}
-
-	endLine := startLine + len(oldLines) - 1
-
-	// Grab 5 lines of context above and below.
-	contextStart := startLine - 5
-	if contextStart < 0 {
-		contextStart = 0
-	}
-	contextEnd := endLine + 5
-	if contextEnd >= len(fileLines) {
-		contextEnd = len(fileLines) - 1
-	}
-
-	// Build the "before" slice: context above + old + context below.
-	beforeLines := make([]string, 0)
-	beforeLines = append(beforeLines, fileLines[contextStart:startLine]...)
-	beforeLines = append(beforeLines, oldLines...)
-	beforeLines = append(beforeLines, fileLines[endLine+1:contextEnd+1]...)
-
-	// Build the "after" slice: context above + new + context below.
-	afterLines := make([]string, 0)
-	afterLines = append(afterLines, fileLines[contextStart:startLine]...)
-	afterLines = append(afterLines, newLines...)
-	afterLines = append(afterLines, fileLines[endLine+1:contextEnd+1]...)
-
-	// Compute diff with a large context so nothing is hidden.
-	diffLines := computeRawDiff(beforeLines, afterLines, 100)
-
-	// The first real line in beforeLines corresponds to contextStart+1 in the file.
-	baseLineNum := contextStart + 1
-
-	// Render both versions with chroma for syntax highlighting.
-	beforeRendered := highlightCode(strings.Join(beforeLines, "\n"), langFromPath(path))
-	afterRendered := highlightCode(strings.Join(afterLines, "\n"), langFromPath(path))
+	oldRendered := highlightCode(oldContent, langFromPath(path))
+	newRendered := highlightCode(newContent, langFromPath(path))
 
 	var sb strings.Builder
 
-	// Header
 	header := lipgloss.NewStyle().
 		Foreground(styles.SidebarLabel).
 		Background(styles.Background).
-		Padding(0, 2).
+		Padding(1, 2).
 		Render("← " + path)
 	sb.WriteString(header)
 	sb.WriteString("\n")
 
-	// Render each diff line with line numbers offset by baseLineNum.
-	contentWidth := c.width - 6
+	// Top padding line (blank line with background)
+	padding := lipgloss.NewStyle().
+		Background(styles.Background).
+		Width(c.width - diffContainerOverhead).
+		Render("")
+	sb.WriteString(padding)
+	sb.WriteString("\n")
+
+	// Prefix is 7 chars: 4 (line num) + 1 (space) + 1 (marker) + 1 (space)
+	// Subtract 2 more for right padding so code doesn't touch the edge.
+	contentWidth := c.width - diffContainerOverhead - 7 - 2
+
 	for _, dl := range diffLines {
 		if dl.content == "" && dl.kind == "context" {
 			continue
@@ -124,20 +81,25 @@ func (c *Chat) RenderCodeDiff(path string, oldContent, newContent string) string
 
 		var highlighted string
 		var lineNum int
-
 		switch dl.kind {
-		case "context", "remove":
-			highlighted = getRenderedLine(beforeRendered, dl.oldNum)
+		case "context":
+			highlighted = getRenderedLine(newRendered, dl.newNum)
 			if highlighted == "" {
 				highlighted = dl.content
 			}
-			lineNum = baseLineNum + dl.oldNum - 1
+			lineNum = startLine + dl.lineNum - 1
+		case "remove":
+			highlighted = getRenderedLine(oldRendered, dl.oldNum)
+			if highlighted == "" {
+				highlighted = dl.content
+			}
+			lineNum = startLine + dl.lineNum - 1
 		case "add":
-			highlighted = getRenderedLine(afterRendered, dl.newNum)
+			highlighted = getRenderedLine(newRendered, dl.newNum)
 			if highlighted == "" {
 				highlighted = dl.content
 			}
-			lineNum = baseLineNum + dl.newNum - 1
+			lineNum = startLine + dl.lineNum - 1
 		}
 
 		switch dl.kind {
@@ -157,142 +119,39 @@ func (c *Chat) RenderCodeDiff(path string, oldContent, newContent string) string
 				Background(styles.Background).
 				Width(1).
 				Render(" ")
-			wrapAndRenderLine(&sb, num, marker, highlighted, contentWidth, c.width, styles.Background)
+			wrapAndRenderLine(&sb, num, marker, highlighted, contentWidth, c.width-diffContainerOverhead, styles.Background)
 
 		case "remove":
 			num := lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#ff6b6b")).
-				Background(lipgloss.Color("#3c2c2c")).
+				Foreground(lipgloss.Color("#c76b72")).
+				Background(lipgloss.Color("#34232c")).
 				Width(4).
 				Align(lipgloss.Right).
 				Render(fmt.Sprintf("%4d", lineNum))
 			marker := lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#ff6b6b")).
-				Background(lipgloss.Color("#3c2c2c")).
+				Foreground(lipgloss.Color("#c76b72")).
+				Background(lipgloss.Color("#34232c")).
 				Width(1).
 				Render("-")
-			wrapAndRenderLine(&sb, num, marker, highlighted, contentWidth, c.width, lipgloss.Color("#3c2c2c"))
+			wrapAndRenderLine(&sb, num, marker, highlighted, contentWidth, c.width-diffContainerOverhead, lipgloss.Color("#34232c"))
 
 		case "add":
 			num := lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#6bff6b")).
-				Background(lipgloss.Color("#2c3c2c")).
+				Foreground(lipgloss.Color("#bfda90")).
+				Background(lipgloss.Color("#23303a")).
 				Width(4).
 				Align(lipgloss.Right).
 				Render(fmt.Sprintf("%4d", lineNum))
 			marker := lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#6bff6b")).
-				Background(lipgloss.Color("#2c3c2c")).
+				Foreground(lipgloss.Color("#bfda90")).
+				Background(lipgloss.Color("#23303a")).
 				Width(1).
 				Render("+")
-			wrapAndRenderLine(&sb, num, marker, highlighted, contentWidth, c.width, lipgloss.Color("#2c3c2c"))
+			wrapAndRenderLine(&sb, num, marker, highlighted, contentWidth, c.width-diffContainerOverhead, lipgloss.Color("#23303a"))
 		}
 	}
 
-	// Wrap the entire diff in a container with user-chat background.
-	container := lipgloss.NewStyle().
-		Background(styles.Background).
-		Width(c.width).
-		Render(sb.String())
-
-	return container
-}
-
-// renderSimpleDiff is the fallback when the file can't be read or oldContent isn't found.
-func (c *Chat) renderSimpleDiff(path string, oldContent, newContent string) string {
-	oldRaw := strings.Split(oldContent, "\n")
-	newRaw := strings.Split(newContent, "\n")
-	diffLines := computeRawDiff(oldRaw, newRaw, 3)
-
-	oldRendered := highlightCode(oldContent, langFromPath(path))
-	newRendered := highlightCode(newContent, langFromPath(path))
-
-	var sb strings.Builder
-
-	header := lipgloss.NewStyle().
-		Foreground(styles.SidebarLabel).
-		Background(styles.Background).
-		Padding(0, 2).
-		Render("← " + path)
-	sb.WriteString(header)
-	sb.WriteString("\n")
-
-	contentWidth := c.width - 6
-	for _, dl := range diffLines {
-		if dl.content == "" && dl.kind == "context" {
-			continue
-		}
-
-		var highlighted string
-		switch dl.kind {
-		case "context", "remove":
-			highlighted = getRenderedLine(oldRendered, dl.oldNum)
-			if highlighted == "" {
-				highlighted = dl.content
-			}
-		case "add":
-			highlighted = getRenderedLine(newRendered, dl.newNum)
-			if highlighted == "" {
-				highlighted = dl.content
-			}
-		}
-
-		switch dl.kind {
-		case "context":
-			numStr := fmt.Sprintf("%4d", dl.newNum)
-			if dl.content == "..." {
-				numStr = "   "
-			}
-			num := lipgloss.NewStyle().
-				Foreground(styles.SidebarValue).
-				Background(styles.Background).
-				Width(4).
-				Align(lipgloss.Right).
-				Render(numStr)
-			marker := lipgloss.NewStyle().
-				Foreground(styles.SidebarValue).
-				Background(styles.Background).
-				Width(1).
-				Render(" ")
-			wrapAndRenderLine(&sb, num, marker, highlighted, contentWidth, c.width, styles.Background)
-
-		case "remove":
-			num := lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#ff6b6b")).
-				Background(lipgloss.Color("#3c2c2c")).
-				Width(4).
-				Align(lipgloss.Right).
-				Render(fmt.Sprintf("%4d", dl.oldNum))
-			marker := lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#ff6b6b")).
-				Background(lipgloss.Color("#3c2c2c")).
-				Width(1).
-				Render("-")
-			wrapAndRenderLine(&sb, num, marker, highlighted, contentWidth, c.width, lipgloss.Color("#3c2c2c"))
-
-		case "add":
-			num := lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#6bff6b")).
-				Background(lipgloss.Color("#2c3c2c")).
-				Width(4).
-				Align(lipgloss.Right).
-				Render(fmt.Sprintf("%4d", dl.newNum))
-			marker := lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#6bff6b")).
-				Background(lipgloss.Color("#2c3c2c")).
-				Width(1).
-				Render("+")
-			wrapAndRenderLine(&sb, num, marker, highlighted, contentWidth, c.width, lipgloss.Color("#2c3c2c"))
-		}
-	}
-
-	// Wrap the entire diff in a container with user-chat background.
-	container := lipgloss.NewStyle().
-		Background(styles.Background).
-		Width(c.width).
-		Render(sb.String())
-
-	return container
+	return c.renderDiffContainer(sb.String())
 }
 
 // highlightCode highlights an entire code block using chroma (no glamour padding).
@@ -343,7 +202,15 @@ func visibleWidth(s string) int {
 func wrapAndRenderLine(sb *strings.Builder, num, marker, highlighted string, contentWidth int, totalWidth int, bgColor color.Color) {
 	chunks := wrapAnsiLine(highlighted, contentWidth)
 	prefixWidth := 7 // 4 (line num) + 1 (space) + 1 (marker) + 1 (space)
+	bgSGR := styles.ColorToAnsiBg(bgColor)
+
+	// Ensure any resets inside num/marker re-apply the background so the
+	// following spaces (and lipgloss padding) keep the correct colour.
+	num = injectBackgroundAfterResets(num, bgSGR)
+	marker = injectBackgroundAfterResets(marker, bgSGR)
+
 	for i, chunk := range chunks {
+		chunk = injectBackgroundAfterResets(chunk, bgSGR)
 		var line string
 		if i == 0 {
 			// First row: num + space + marker + space + content
@@ -351,6 +218,7 @@ func wrapAndRenderLine(sb *strings.Builder, num, marker, highlighted string, con
 		} else {
 			// Continuation rows: indent to align with content column
 			indent := lipgloss.NewStyle().Background(bgColor).Render(strings.Repeat(" ", prefixWidth))
+			indent = injectBackgroundAfterResets(indent, bgSGR)
 			line = indent + chunk
 		}
 		// Pad the entire line to full width so the background spans edge-to-edge.
@@ -358,6 +226,14 @@ func wrapAndRenderLine(sb *strings.Builder, num, marker, highlighted string, con
 		sb.WriteString(style.Render(line))
 		sb.WriteString("\n")
 	}
+}
+
+// injectBackgroundAfterResets inserts an ANSI background SGR after every bare
+// reset sequence so that lipgloss padding spaces inherit the correct colour.
+func injectBackgroundAfterResets(s, bgSGR string) string {
+	s = strings.ReplaceAll(s, "\x1b[m", "\x1b[m"+bgSGR)
+	s = strings.ReplaceAll(s, "\x1b[0m", "\x1b[0m"+bgSGR)
+	return s
 }
 
 // wrapAnsiLine splits a string with ANSI codes into chunks where each chunk's
@@ -433,17 +309,11 @@ func getRenderedLine(rendered []string, n int) string {
 	if n <= 0 {
 		return ""
 	}
-	count := 0
-	for _, line := range rendered {
-		if isVisualEmpty(line) {
-			continue
-		}
-		count++
-		if count == n {
-			return line
-		}
+	idx := n - 1
+	if idx >= len(rendered) {
+		return ""
 	}
-	return ""
+	return rendered[idx]
 }
 
 // isVisualEmpty checks if a line is visually empty (no visible characters).
@@ -549,6 +419,7 @@ type diffLine struct {
 	content string
 	oldNum  int // 1-based line number in old file (0 = not present)
 	newNum  int // 1-based line number in new file (0 = not present)
+	lineNum int // actual line number in the current file view (1-based from startLine)
 }
 
 // computeRawDiff computes a unified diff on raw strings with correct line numbers.
@@ -566,29 +437,32 @@ func computeRawDiff(oldLines, newLines []string, context int) []diffLine {
 
 	for oldIdx < len(oldLines) || newIdx < len(newLines) {
 		if oldIdx < len(oldLines) && newIdx < len(newLines) && matches[oldIdx] == newIdx {
-			// Context line
+			// Context line — lineNum follows the new file position.
 			result = append(result, diffLine{
 				kind:    "context",
 				content: oldLines[oldIdx],
 				oldNum:  oldIdx + 1,
 				newNum:  newIdx + 1,
+				lineNum: newIdx + 1,
 			})
 			oldIdx++
 			newIdx++
 		} else if oldIdx < len(oldLines) && (newIdx >= len(newLines) || matches[oldIdx] == -1) {
-			// Removed line
+			// Removed line — lineNum follows the old file position (git diff style).
 			result = append(result, diffLine{
 				kind:    "remove",
 				content: oldLines[oldIdx],
 				oldNum:  oldIdx + 1,
+				lineNum: oldIdx + 1,
 			})
 			oldIdx++
 		} else if newIdx < len(newLines) {
-			// Added line
+			// Added line — lineNum follows the new file position.
 			result = append(result, diffLine{
 				kind:    "add",
 				content: newLines[newIdx],
 				newNum:  newIdx + 1,
+				lineNum: newIdx + 1,
 			})
 			newIdx++
 		} else {
@@ -599,7 +473,9 @@ func computeRawDiff(oldLines, newLines []string, context int) []diffLine {
 	return filterContext(result, context)
 }
 
-// findMatches finds the best matching between old and new lines using LCS.
+// findMatches finds the best matching between old and new lines using a
+// position-aware greedy algorithm that prefers lines close to the current
+// position, avoiding incorrect matches when there are duplicate lines.
 func findMatches(oldLines, newLines []string) []int {
 	matches := make([]int, len(oldLines))
 	for i := range matches {
@@ -610,24 +486,37 @@ func findMatches(oldLines, newLines []string) []int {
 		return matches
 	}
 
-	lcs := longestCommonSubsequence(oldLines, newLines)
-
-	oldIdx, newIdx := 0, 0
-	for _, lcsLine := range lcs {
-		for oldIdx < len(oldLines) && oldLines[oldIdx] != lcsLine {
-			oldIdx++
+	used := make([]bool, len(newLines))
+	for oldIdx := 0; oldIdx < len(oldLines); oldIdx++ {
+		bestNewIdx := -1
+		bestDist := len(newLines) + len(oldLines)
+		for newIdx := 0; newIdx < len(newLines); newIdx++ {
+			if used[newIdx] {
+				continue
+			}
+			if oldLines[oldIdx] != newLines[newIdx] {
+				continue
+			}
+			dist := abs(newIdx - oldIdx)
+			if dist < bestDist {
+				bestDist = dist
+				bestNewIdx = newIdx
+			}
 		}
-		for newIdx < len(newLines) && newLines[newIdx] != lcsLine {
-			newIdx++
-		}
-		if oldIdx < len(oldLines) && newIdx < len(newLines) {
-			matches[oldIdx] = newIdx
-			oldIdx++
-			newIdx++
+		if bestNewIdx != -1 {
+			matches[oldIdx] = bestNewIdx
+			used[bestNewIdx] = true
 		}
 	}
 
 	return matches
+}
+
+func abs(a int) int {
+	if a < 0 {
+		return -a
+	}
+	return a
 }
 
 // longestCommonSubsequence finds the LCS of two string slices.
@@ -726,4 +615,254 @@ func filterContext(diff []diffLine, context int) []diffLine {
 	}
 
 	return result
+}
+
+// normalizeLines trims trailing empty lines and removes leading/trailing
+// whitespace from each line for robust matching.
+func normalizeLines(lines []string) []string {
+	// Remove trailing empty lines
+	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return lines
+}
+
+// findLineSequence finds the first occurrence of needle lines in haystack lines
+// and returns the starting line index, or -1 if not found.
+func findLineSequence(haystack, needle []string) int {
+	if len(needle) == 0 {
+		return 0
+	}
+
+	for i := 0; i <= len(haystack)-len(needle); i++ {
+		if lineSeqEqual(haystack[i:i+len(needle)], needle) {
+			return i
+		}
+	}
+	return -1
+}
+
+// lineSeqEqual compares two line slices for equality, ignoring leading/trailing
+// whitespace differences on each line.
+func lineSeqEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if strings.TrimSpace(a[i]) != strings.TrimSpace(b[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// RenderCodeDiffV2 renders a diff when the caller already knows the line numbers
+// of newContent in the file. It reads only the necessary lines from disk using
+// bufio.Scanner, avoiding a full file read into memory.
+func (c *Chat) RenderCodeDiffV2(path, oldContent, newContent string, startLine int) string {
+	oldLines := normalizeLines(strings.Split(oldContent, "\n"))
+	newLines := normalizeLines(strings.Split(newContent, "\n"))
+
+	// EndLine is computed from NewContent: StartLine + newline count
+	endLine := startLine + strings.Count(newContent, "\n")
+
+	contextStart := startLine - 5
+	if contextStart < 1 {
+		contextStart = 1
+	}
+	contextEnd := endLine + 5
+
+	// Read only the lines we need from the file.
+	file, err := os.Open(path)
+	if err != nil {
+		return c.renderSimpleDiff(path, oldContent, newContent, startLine)
+	}
+	defer file.Close()
+
+	var contextLines []string
+	scanner := bufio.NewScanner(file)
+	lineNo := 0
+	for scanner.Scan() {
+		lineNo++
+		if lineNo >= contextStart && lineNo <= contextEnd {
+			contextLines = append(contextLines, scanner.Text())
+		}
+		if lineNo > contextEnd {
+			break
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return c.renderSimpleDiff(path, oldContent, newContent, startLine)
+	}
+
+	// Determine boundaries within the sliced context.
+	beforeStart := 0
+	beforeEnd := startLine - contextStart         // exclusive
+	afterStart := endLine - contextStart + 1      // first line after newContent
+	afterEnd := len(contextLines)                 // exclusive
+
+	beforeLines := make([]string, 0)
+	beforeLines = append(beforeLines, contextLines[beforeStart:beforeEnd]...)
+	beforeLines = append(beforeLines, oldLines...)
+	if afterStart < afterEnd {
+		beforeLines = append(beforeLines, contextLines[afterStart:afterEnd]...)
+	}
+
+	afterLines := make([]string, 0)
+	afterLines = append(afterLines, contextLines[beforeStart:beforeEnd]...)
+	afterLines = append(afterLines, newLines...)
+	if afterStart < afterEnd {
+		afterLines = append(afterLines, contextLines[afterStart:afterEnd]...)
+	}
+
+	diffLines := computeRawDiff(beforeLines, afterLines, 100)
+
+	// Build line number mappings from diff position to actual file line.
+	// beforeLines = contextBefore (contextStart..startLine-1) + oldLines + contextAfter (endLine+1..contextEnd)
+	// afterLines  = contextBefore (contextStart..startLine-1) + newLines + contextAfter (endLine+1..contextEnd)
+	beforeLineMap := buildLineMap(len(beforeLines), contextStart, startLine, endLine, len(oldLines), len(newLines), true)
+	afterLineMap := buildLineMap(len(afterLines), contextStart, startLine, endLine, len(oldLines), len(newLines), false)
+
+	beforeRendered := highlightCode(strings.Join(beforeLines, "\n"), langFromPath(path))
+	afterRendered := highlightCode(strings.Join(afterLines, "\n"), langFromPath(path))
+
+	var sb strings.Builder
+
+	// Header
+	header := lipgloss.NewStyle().
+		Foreground(styles.SidebarLabel).
+		Background(styles.Background).
+		Padding(1, 2).
+		Render("← " + path)
+	sb.WriteString(header)
+	sb.WriteString("\n")
+
+	// Top padding line
+	padding := lipgloss.NewStyle().
+		Background(styles.Background).
+		Width(c.width - diffContainerOverhead).
+		Render("")
+	sb.WriteString(padding)
+	sb.WriteString("\n")
+
+	contentWidth := c.width - diffContainerOverhead - 7 - 2
+	for _, dl := range diffLines {
+		if dl.content == "" && dl.kind == "context" {
+			continue
+		}
+
+		var highlighted string
+		var lineNum int
+
+		switch dl.kind {
+		case "context":
+			highlighted = getRenderedLine(beforeRendered, dl.oldNum)
+			if highlighted == "" {
+				highlighted = dl.content
+			}
+			// Context lines exist in both before and after; show the "after" line number
+			// because that reflects the current file state.
+			lineNum = afterLineMap[dl.newNum]
+		case "remove":
+			highlighted = getRenderedLine(beforeRendered, dl.oldNum)
+			if highlighted == "" {
+				highlighted = dl.content
+			}
+			lineNum = beforeLineMap[dl.oldNum]
+		case "add":
+			highlighted = getRenderedLine(afterRendered, dl.newNum)
+			if highlighted == "" {
+				highlighted = dl.content
+			}
+			lineNum = afterLineMap[dl.newNum]
+		}
+
+		switch dl.kind {
+		case "context":
+			numStr := fmt.Sprintf("%4d", lineNum)
+			if dl.content == "..." {
+				numStr = "   "
+			}
+			num := lipgloss.NewStyle().
+				Foreground(styles.SidebarValue).
+				Background(styles.Background).
+				Width(4).
+				Align(lipgloss.Right).
+				Render(numStr)
+			marker := lipgloss.NewStyle().
+				Foreground(styles.SidebarValue).
+				Background(styles.Background).
+				Width(1).
+				Render(" ")
+			wrapAndRenderLine(&sb, num, marker, highlighted, contentWidth, c.width-diffContainerOverhead, styles.Background)
+
+		case "remove":
+			num := lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#c76b72")).
+				Background(lipgloss.Color("#34232c")).
+				Width(4).
+				Align(lipgloss.Right).
+				Render(fmt.Sprintf("%4d", lineNum))
+			marker := lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#c76b72")).
+				Background(lipgloss.Color("#34232c")).
+				Width(1).
+				Render("-")
+			wrapAndRenderLine(&sb, num, marker, highlighted, contentWidth, c.width-diffContainerOverhead, lipgloss.Color("#34232c"))
+
+		case "add":
+			num := lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#bfda90")).
+				Background(lipgloss.Color("#23303a")).
+				Width(4).
+				Align(lipgloss.Right).
+				Render(fmt.Sprintf("%4d", lineNum))
+			marker := lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#bfda90")).
+				Background(lipgloss.Color("#23303a")).
+				Width(1).
+				Render("+")
+			wrapAndRenderLine(&sb, num, marker, highlighted, contentWidth, c.width-diffContainerOverhead, lipgloss.Color("#23303a"))
+		}
+	}
+
+	return c.renderDiffContainer(sb.String())
+}
+
+// renderDiffContainer wraps diff content in a styled container with a subtle left border.
+func (c *Chat) renderDiffContainer(content string) string {
+	return lipgloss.NewStyle().
+		Background(styles.Background).
+		Width(c.width).
+		PaddingLeft(2).
+		BorderStyle(lipgloss.Border{Left: "┃"}).
+		BorderLeft(true).
+		BorderForeground(lipgloss.Color("#1a1a1a")).
+		Render(content)
+}
+
+// buildLineMap creates a 1-based mapping from diff line position to actual file line number.
+func buildLineMap(totalLines, contextStart, startLine, endLine, oldCount, newCount int, isBefore bool) map[int]int {
+	m := make(map[int]int, totalLines)
+	ctxBeforeCount := startLine - contextStart
+	var changeCount int
+	var afterStart int
+	if isBefore {
+		changeCount = oldCount
+		afterStart = startLine + oldCount
+	} else {
+		changeCount = newCount
+		afterStart = endLine + 1
+	}
+	for i := 1; i <= totalLines; i++ {
+		switch {
+		case i <= ctxBeforeCount:
+			m[i] = contextStart + i - 1
+		case i <= ctxBeforeCount+changeCount:
+			m[i] = startLine + i - ctxBeforeCount - 1
+		default:
+			m[i] = afterStart + i - ctxBeforeCount - changeCount - 1
+		}
+	}
+	return m
 }

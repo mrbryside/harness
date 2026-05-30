@@ -1,36 +1,15 @@
 package components
 
-import (
-	"regexp"
-	"strings"
+import "strings"
 
-	"github.com/mrbryside/harness/tui/styles"
-)
-
-// bgSgrRE matches any SGR segment that sets a background colour.
-var bgSgrRE = regexp.MustCompile(`(?:48;2;\d+;\d+;\d+|48;5;\d+|10[0-7]|4[0-79])`)
-
-// rewriteBgsToSelection replaces every background-setting segment with
-// styles.SelectionBgSGR's payload. If the escape doesn't contain a BG segment
-// it's returned untouched.
-func rewriteBgsToSelection(esc string) string {
-	if !strings.HasPrefix(esc, "\x1b[") || !strings.HasSuffix(esc, "m") {
-		return esc
-	}
-	body := esc[2 : len(esc)-1]
-	if body == "" {
-		return esc
-	}
-	const selPayload = "48;2;73;72;62"
-	if !bgSgrRE.MatchString(body) {
-		return esc
-	}
-	return "\x1b[" + bgSgrRE.ReplaceAllString(body, selPayload) + "m"
-}
-
-// WrapLineRange paints styles.SelectionBgSGR over visible cells between start
-// and end rune-columns, restoring bgSGR afterwards.
-func WrapLineRange(line string, start, end int, bgSGR string) string {
+// WrapLineRange highlights visible cells between start and end rune-columns
+// using reverse video (ANSI 7), then restores bgSGR afterwards.
+// Reverse video swaps foreground/background colours, so it works on any
+// underlying background (including code diff add/remove colours) without
+// painting over them.
+// If width > 0 and end < 0 (full-line selection), the line is padded with
+// spaces to the full width.
+func WrapLineRange(line string, start, end int, bgSGR string, width int) string {
 	var sb strings.Builder
 	col := 0
 	inside := false
@@ -58,7 +37,9 @@ func WrapLineRange(line string, start, end int, bgSGR string) string {
 			if inside {
 				if esc == "\x1b[m" || esc == "\x1b[0m" {
 					sb.WriteString(esc)
-					sb.WriteString(styles.SelectionBgSGR)
+					// Re-assert reverse video after a reset so the highlight
+					// stays active on the default background.
+					sb.WriteString("\x1b[7m")
 					i = j + 1
 					if bgSGR != "" {
 						if remaining := string(runes[i:]); strings.HasPrefix(remaining, bgSGR) {
@@ -67,7 +48,8 @@ func WrapLineRange(line string, start, end int, bgSGR string) string {
 					}
 					continue
 				}
-				esc = rewriteBgsToSelection(esc)
+				// Preserve existing backgrounds (code diff add/remove colours, etc.)
+				// instead of rewriting them to selection bg.
 			}
 			sb.WriteString(esc)
 			i = j + 1
@@ -75,10 +57,16 @@ func WrapLineRange(line string, start, end int, bgSGR string) string {
 		}
 
 		if !inside && col == start {
-			sb.WriteString(styles.SelectionBgSGR)
+			// Start selection: reverse video (swap fg/bg).
+			// This works on any background (including code diff add/remove
+			// colours) because it inverts the existing colours instead of
+			// painting over them.
+			sb.WriteString("\x1b[7m")
 			inside = true
 		}
 		if inside && !bgClosed && end >= 0 && col == end {
+			// End selection: remove reverse video, then restore bg.
+			sb.WriteString("\x1b[27m")
 			sb.WriteString(bgSGR)
 			bgClosed = true
 			inside = false
@@ -87,8 +75,23 @@ func WrapLineRange(line string, start, end int, bgSGR string) string {
 		col++
 		i++
 	}
-	if inside && !bgClosed {
+	// Full-line selection (end < 0) is kept open so the padding below
+	// can extend the highlight to the container edge.  For every other
+	// selection we close it now (remove reverse video, then restore bg).
+	if inside && !bgClosed && end >= 0 {
+		sb.WriteString("\x1b[27m")
 		sb.WriteString(bgSGR)
 	}
+
+	// Pad full-line selections to extend the highlight to the right edge.
+	// Partial selections are NOT padded — the underlying background (e.g.
+	// code diff add/remove colours) is left untouched.
+	if width > 0 && col < width && end < 0 && inside {
+		sb.WriteString("\x1b[7m")
+		sb.WriteString(strings.Repeat(" ", width-col))
+		sb.WriteString("\x1b[27m")
+		sb.WriteString(bgSGR)
+	}
+
 	return sb.String()
 }

@@ -11,6 +11,12 @@ import (
 // GlamourStyle is the Glamour markdown theme used for assistant messages.
 const GlamourStyle = "dark"
 
+// ColorToAnsiBg converts a color.Color to an ANSI 24-bit background SGR
+// escape sequence.
+func ColorToAnsiBg(c color.Color) string {
+	return hexToAnsiBg(hexFromColor(c))
+}
+
 // hexToAnsiBg converts a 6-digit hex colour string to an ANSI 24-bit
 // background SGR escape sequence.
 func hexToAnsiBg(hex string) string {

@@ -18,6 +18,10 @@ type AutocompleteSelectMsg struct {
 	Command string
 }
 
+// scrollTickMsg is sent every tick while the mouse is held past the
+// edge of the chat viewport so selection auto-scrolls smoothly.
+type scrollTickMsg struct{}
+
 // Update is the main message handler. It dispatches to focused
 // handler methods so each file in app/ owns a single concern.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -34,6 +38,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleMouseMotion(msg)
 	case tea.MouseReleaseMsg:
 		return m.handleMouseRelease(msg)
+	case scrollTickMsg:
+		return m.handleScrollTick()
 	case tea.PasteMsg:
 		return m.handlePaste(msg)
 	case components.SendMsg:

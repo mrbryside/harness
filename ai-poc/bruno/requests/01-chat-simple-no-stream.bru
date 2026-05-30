@@ -1,0 +1,70 @@
+meta {
+  name: 01 - Chat Simple (No Stream)
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/chat/completions
+  body: json
+  auth: bearer
+}
+
+headers {
+  Content-Type: application/json
+}
+
+auth:bearer {
+  token: {{apiKey}}
+}
+
+body:json {
+  {
+    "model": "{{model}}",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hello! How are you?"
+      }
+    ],
+    "stream": false
+  }
+}
+
+docs {
+  # Chat Simple (No Stream)
+  
+  ตัวอย่างพื้นฐานที่สุด - ส่งข้อความไปและได้รับคำตอบแบบเต็มๆ ในครั้งเดียว
+  
+  ## จะเห็นอะไรใน Response
+  
+  ```json
+  {
+    "id": "chatcmpl-xxx",
+    "object": "chat.completion",
+    "created": 1234567890,
+    "model": "qwen3.6-plus",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "Hello! I'm doing well..."
+        },
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 10,
+      "completion_tokens": 20,
+      "total_tokens": 30
+    }
+  }
+  ```
+  
+  ## สังเกตุจุดสำคัญ
+  - `stream: false` → ได้ response ทั้งหมดในครั้งเดียว
+  - `choices[0].message.content` → ข้อความตอบกลับเต็มๆ
+  - `finish_reason: "stop"` → ตอบจบปกติ
+  - มี `usage` บอกจำนวน token ที่ใช้
+}

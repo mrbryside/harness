@@ -1,0 +1,116 @@
+meta {
+  name: 06 - Full Conversation With Tools
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/chat/completions
+  body: json
+  auth: bearer
+}
+
+headers {
+  Content-Type: application/json
+}
+
+auth:bearer {
+  token: {{apiKey}}
+}
+
+body:json {
+  {
+    "model": "{{model}}",
+    "messages": [
+      {
+        "role": "user",
+        "content": "List all files in the current directory"
+      },
+      {
+        "role": "assistant",
+        "content": null,
+        "tool_calls": [
+          {
+            "id": "call_abc123",
+            "type": "function",
+            "function": {
+              "name": "bash",
+              "arguments": "{\"command\":\"ls -la\"}"
+            }
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "call_abc123",
+        "content": "total 32\ndrwxr-xr-x  5 user  staff   160 May 29 10:00 .\ndrwxr-xr-x  3 user  staff    96 May 29 09:00 ..\n-rw-r--r--  1 user  staff  2048 May 29 10:00 main.go\n-rw-r--r--  1 user  staff  1024 May 29 10:00 go.mod"
+      }
+    ],
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "bash",
+          "description": "Execute a bash command in the terminal",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "command": {
+                "type": "string",
+                "description": "The bash command to execute"
+              }
+            },
+            "required": ["command"]
+          }
+        }
+      }
+    ],
+    "stream": false
+  }
+}
+
+docs {
+  # Full Conversation With Tools (Round 2)
+  
+  ตัวอย่างการส่งครบทั้ง conversation รวมถึง tool result กลับไปให้ AI
+  
+  ## จะเห็นอะไรใน Response
+  
+  ```json
+  {
+    "id": "chatcmpl-xxx",
+    "object": "chat.completion",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "Here are the files in your directory:\n\n- main.go (2KB)\n- go.mod (1KB)\n\nYou have a Go project!"
+        },
+        "finish_reason": "stop"
+      }
+    ]
+  }
+  ```
+  
+  ## สังเกตุจุดสำคัญ
+  - Messages array มี 3 ส่วน:
+    1. `user` - คำถามเริ่มต้น
+    2. `assistant` + `tool_calls` - AI ขอใช้ tool
+    3. `tool` + `tool_call_id` - ผลลัพธ์จาก tool
+  - `role: "tool"` ต้องมี `tool_call_id` ที่ตรงกับ `tool_calls`
+  - AI ตอบกลับด้วย `content` (ข้อความธรรมดา) เพราะได้รับข้อมูลครบแล้ว
+  - `finish_reason: "stop"` → ตอบจบปกติ ไม่ต้องใช้ tool อีก
+  
+  ## Flow แบบเต็ม
+  ```
+  User: "List files" 
+    → AI: tool_calls [bash: "ls -la"] 
+    → Execute tool 
+    → User (tool role): "total 32...main.go...go.mod"
+    → AI: "Here are the files..."
+  ```
+  
+  ## ทำไมต้องส่ง history ย้อนกลับไป?
+  AI ไม่มี memory! ต้องส่ง conversation ทั้งหมดทุกครั้ง เพื่อให้ AI รู้ context
+}

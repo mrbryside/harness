@@ -63,7 +63,9 @@ func (s Selection) Text(content string) string {
 }
 
 // Overlay paints the selection highlight on top of rendered output.
-func (s Selection) Overlay(rendered string, yoff int, bgSGR string) string {
+// If width > 0, the highlight is padded to the full width so it extends
+// to the right edge of the container.
+func (s Selection) Overlay(rendered string, yoff int, bgSGR string, width int) string {
 	if !s.HasRange() {
 		return rendered
 	}
@@ -81,7 +83,10 @@ func (s Selection) Overlay(rendered string, yoff int, bgSGR string) string {
 		if contentLine == el {
 			endCol = ec
 		}
-		lines[i] = WrapLineRange(lines[i], startCol, endCol, bgSGR)
+		if startCol < 0 {
+			startCol = 0
+		}
+		lines[i] = WrapLineRange(lines[i], startCol, endCol, bgSGR, width)
 	}
 	return strings.Join(lines, "\n")
 }

@@ -79,3 +79,80 @@ func TestChatUserMessageNotMarkdownRendered(t *testing.T) {
 		t.Errorf("expected user message to remain verbatim, got:\n%s", view)
 	}
 }
+
+func TestChatAssistantMessageHasThreeCharLeftMargin(t *testing.T) {
+	c := components.NewChat(80, 24)
+	c.AppendMessage("assistant", "Hello world")
+	view := c.View()
+
+	// Find the line containing "Hello world" and verify it has 3 leading spaces.
+	lines := strings.Split(view, "\n")
+	found := false
+	for _, line := range lines {
+		if strings.Contains(line, "Hello") {
+			found = true
+			clean := stripAnsi(line)
+			if !strings.HasPrefix(clean, "   Hello") {
+				t.Errorf("expected assistant line to start with 3-space margin, got: %q", clean)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("expected to find 'Hello' in view, got:\n%s", view)
+	}
+}
+
+func TestChatAssistantMarkdownPreservesFormatWithMargin(t *testing.T) {
+	c := components.NewChat(80, 24)
+	c.AppendMessage("assistant", "# Title\n\nParagraph text.")
+	view := c.View()
+
+	// Markdown should be rendered (no raw #).
+	if strings.Contains(view, "# Title") {
+		t.Errorf("expected markdown to be rendered, got raw markdown in view:\n%s", view)
+	}
+
+	// Both heading and paragraph should have the 3-char margin.
+	lines := strings.Split(view, "\n")
+	foundHeading := false
+	foundParagraph := false
+	for _, line := range lines {
+		clean := stripAnsi(line)
+		if strings.Contains(clean, "Title") {
+			foundHeading = true
+			if !strings.HasPrefix(clean, "   ") {
+				t.Errorf("expected heading line to start with 3-space margin, got: %q", clean)
+			}
+		}
+		if strings.Contains(clean, "Paragraph") {
+			foundParagraph = true
+			if !strings.HasPrefix(clean, "   ") {
+				t.Errorf("expected paragraph line to start with 3-space margin, got: %q", clean)
+			}
+		}
+	}
+	if !foundHeading {
+		t.Errorf("expected 'Title' in view, got:\n%s", view)
+	}
+	if !foundParagraph {
+		t.Errorf("expected 'Paragraph' in view, got:\n%s", view)
+	}
+}
+
+func TestChatAssistantMarginDoesNotExceedWidth(t *testing.T) {
+	width := 40
+	c := components.NewChat(width, 24)
+	c.AppendMessage("assistant", "This is a longer message that should wrap within the chat width including the three character left margin.")
+	view := c.View()
+
+	lines := strings.Split(view, "\n")
+	for _, line := range lines {
+		if strings.TrimSpace(stripAnsi(line)) == "" {
+			continue
+		}
+		w := len(stripAnsi(line))
+		if w > width {
+			t.Errorf("line width %d exceeds chat width %d: %q", w, width, stripAnsi(line))
+		}
+	}
+}

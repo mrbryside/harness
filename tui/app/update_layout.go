@@ -22,16 +22,19 @@ func (m Model) chatRect() (x0, y0, w, h int) {
 }
 
 // chatContentCoord maps an absolute terminal cell (x, y) to a
-// chat-content (line, col) coordinate relative to the visible viewport.
+// content-relative (line, col) coordinate.  The line is offset by the
+// viewport's YOffset so selection anchors stay locked to content even when
+// the viewport scrolls.
 func (m Model) chatContentCoord(x, y int) (line, col int, ok bool) {
 	x0, y0, w, h := m.chatRect()
 	if x < x0 || x >= x0+w || y < y0 || y >= y0+h {
 		return 0, 0, false
 	}
-	return y - y0, x - x0, true
+	return m.chat.YOffset() + (y - y0), x - x0, true
 }
 
-// chatContentCoordClamped clamps to the chat rectangle.
+// chatContentCoordClamped clamps to the chat rectangle and returns a
+// content-relative coordinate.
 func (m Model) chatContentCoordClamped(x, y int) (line, col int) {
 	x0, y0, w, h := m.chatRect()
 	if x < x0 {
@@ -44,7 +47,7 @@ func (m Model) chatContentCoordClamped(x, y int) (line, col int) {
 	} else if y >= y0+h {
 		y = y0 + h - 1
 	}
-	return y - y0, x - x0
+	return m.chat.YOffset() + (y - y0), x - x0
 }
 
 // inputBodyRect returns the screen-cell rectangle of the textarea body

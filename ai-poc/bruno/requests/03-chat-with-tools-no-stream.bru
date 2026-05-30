@@ -1,0 +1,123 @@
+meta {
+  name: 03 - Chat With Tools (No Stream)
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/chat/completions
+  body: json
+  auth: bearer
+}
+
+headers {
+  Content-Type: application/json
+}
+
+auth:bearer {
+  token: {{apiKey}}
+}
+
+body:json {
+  {
+    "model": "{{model}}",
+    "messages": [
+      {
+        "role": "user",
+        "content": "List all files in the current directory"
+      }
+    ],
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "bash",
+          "description": "Execute a bash command in the terminal",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "command": {
+                "type": "string",
+                "description": "The bash command to execute"
+              }
+            },
+            "required": ["command"]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "find",
+          "description": "Find files matching a pattern in a directory",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "Directory path to search in"
+              },
+              "pattern": {
+                "type": "string",
+                "description": "File pattern to match (e.g., *.go)"
+              }
+            },
+            "required": ["path", "pattern"]
+          }
+        }
+      }
+    ],
+    "stream": false
+  }
+}
+
+docs {
+  # Chat With Tools (No Stream)
+  
+  ส่งข้อความพร้อมกำหนด Tools ให้ AI ใช้ แบบไม่ stream
+  
+  ## จะเห็นอะไรใน Response
+  
+  AI จะตอบกลับด้วย `tool_calls` แทนที่จะเป็น `content`:
+  
+  ```json
+  {
+    "id": "chatcmpl-xxx",
+    "object": "chat.completion",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": null,
+          "tool_calls": [
+            {
+              "id": "call_abc123",
+              "type": "function",
+              "function": {
+                "name": "bash",
+                "arguments": "{\"command\":\"ls -la\"}"
+              }
+            }
+          ]
+        },
+        "finish_reason": "tool_calls"
+      }
+    ]
+  }
+  ```
+  
+  ## สังเกตุจุดสำคัญ
+  - `content: null` → AI ไม่ตอบข้อความ แต่เรียก tool แทน
+  - `tool_calls` array → รายการ tools ที่ AI อยากใช้
+  - `tool_calls[0].function.name` → ชื่อ tool: "bash"
+  - `tool_calls[0].function.arguments` → arguments เป็น JSON string
+  - `finish_reason: "tool_calls"` → หยุดเพราะจะเรียก tool
+  - `role: "assistant"` แต่เป็น tool_calls ไม่ใช่ข้อความ
+  
+  ## Flow การทำงาน
+  1. User ส่งข้อความ + tools list
+  2. AI ตอบกลับด้วย `tool_calls` (อันนี้)
+  3. Client ต้อง execute tool แล้วส่ง result กลับไป
+  4. AI ประมวลผล result แล้วตอบกลับ
+}

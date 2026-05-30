@@ -26,7 +26,7 @@ func (i Input) View() string {
 
 	// Selection overlay applied before lipgloss width wrapper.
 	textareaBody := i.textarea.View()
-	textareaBody = i.sel.Overlay(textareaBody, 0, styles.PanelBgSGR)
+	textareaBody = i.sel.Overlay(textareaBody, 0, styles.PanelBgSGR, innerWidth)
 
 	body := lipgloss.NewStyle().
 		Background(styles.PanelBg).

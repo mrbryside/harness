@@ -28,6 +28,11 @@ type Model struct {
 	// streaming we show a hint and wait for a second press within this
 	// window before actually quitting.
 	ctrlCDebounce time.Time
+
+	// Auto-scroll state for smooth selection scrolling past viewport edges.
+	// -1 = scrolling up, 0 = off, 1 = scrolling down.
+	chatAutoScrollDir  int
+	chatAutoScrollCol  int
 }
 
 // ctrlCDebounceWindow is how long the user has to press Ctrl+C a second
@@ -65,11 +70,72 @@ func New(provider llm.LLMProvider) Model {
 	})
 
 	chat := components.NewChat(80, 20)
-	chat.AppendMessage("assistant", "I added a new rule to AGENTS.md:")
-	chat.AppendCodeDiff("AGENTS.md",
-		"7. **Mouse events stay inside the program.** `tea.WithMouseCellMotion()` is set in `main.go` so the terminal never scrolls — scroll goes to the chat viewport.",
-		"7. **Mouse events stay inside the program.** `tea.WithMouseCellMotion()` is set in `main.go` so the terminal never scrolls — scroll goes to the chat viewport.\n8. **Diff backgrounds use lipgloss.** When rendering highlighted diff lines, use `lipgloss.NewStyle().Background(color).Width(w).Render(content)` instead of manual space padding to avoid soft-wrap artifacts.",
-	)
+	// Demo 1: Small addition (comments added)
+	chat.AppendCodeDiff(components.CodeDiff{
+		Path: "demos/agent_demo.go",
+		OldContent: `func (c *agentCommand) Name() string        { return "agent" }
+func (c *agentCommand) Description() string { return "Switch AI agent" }`,
+		NewContent: `// Name returns the command name.
+func (c *agentCommand) Name() string        { return "agent" }
+// Description returns the command description.
+func (c *agentCommand) Description() string { return "Switch AI agent" }`,
+		StartLine: 19,
+	})
+
+	// Demo 2: Delete Execute() and add a big new function (~20 lines)
+	chat.AppendCodeDiff(components.CodeDiff{
+		Path: "demos/agent_demo.go",
+		OldContent: `func (c *agentCommand) Execute(args string) Result {
+	return Result{
+		Chat:  "Available agents: coder, reviewer, architect",
+		Toast: "✓ Agent list",
+	}
+}`,
+		NewContent: `// Execute runs the agent command with full orchestration.
+// It parses the args, validates the agent name, loads config,
+// initializes the provider, and streams the response back.
+func (c *agentCommand) Execute(args string) Result {
+	// Parse and validate input
+	if strings.TrimSpace(args) == "" {
+		return Result{
+			Chat:  "Error: agent name required",
+			Toast: "✗ Missing agent",
+		}
+	}
+
+	// Load available agents from config
+	agents := []string{"coder", "reviewer", "architect", "debugger"}
+	found := false
+	for _, a := range agents {
+		if a == strings.ToLower(strings.TrimSpace(args)) {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return Result{
+			Chat:  fmt.Sprintf("Unknown agent: %s", args),
+			Toast: "✗ Invalid agent",
+		}
+	}
+
+	// Initialize provider and stream response
+	provider := loadProvider(args)
+	if provider == nil {
+		return Result{
+			Chat:  "Failed to initialize provider",
+			Toast: "✗ Provider error",
+		}
+	}
+
+	return Result{
+		Chat:  fmt.Sprintf("Switched to %s agent", args),
+		Toast: fmt.Sprintf("✓ Active: %s", args),
+	}
+}`,
+		StartLine: 24,
+	})
 
 	return Model{
 		chat:         chat,

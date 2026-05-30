@@ -9,6 +9,14 @@ import (
 
 const messageGap = "\n\n"
 
+// CodeDiff represents a code change with line numbers.
+type CodeDiff struct {
+	Path       string // file path
+	OldContent string // old code
+	NewContent string // new code
+	StartLine  int    // 1-based line number where newContent starts in the file
+}
+
 // AppendMessage adds a new message to the history.
 func (c *Chat) AppendMessage(role, content string) {
 	if role == "user" {
@@ -18,13 +26,15 @@ func (c *Chat) AppendMessage(role, content string) {
 	c.refresh()
 }
 
-// AppendCodeDiff adds a code-diff message to the history.
-func (c *Chat) AppendCodeDiff(path, oldContent, newContent string) {
+// AppendCodeDiff adds a code-diff message with explicit line numbers.
+// EndLine is computed automatically from NewContent (StartLine + newline count).
+func (c *Chat) AppendCodeDiff(diff CodeDiff) {
 	c.messages = append(c.messages, chatMessage{
-		role:     "code_diff",
-		diffPath: path,
-		diffOld:  oldContent,
-		diffNew:  newContent,
+		role:      "code_diff",
+		diffPath:  diff.Path,
+		diffOld:   diff.OldContent,
+		diffNew:   diff.NewContent,
+		diffStart: diff.StartLine,
 	})
 	c.refresh()
 }

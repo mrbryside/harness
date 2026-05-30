@@ -42,13 +42,16 @@ func (c *Chat) renderAssistantMessage(msg chatMessage) string {
 	}
 	content = stripInlineCodeBg(content)
 
+	// Three-space left margin with the chat background colour.
+	margin := styles.ChatBgSGR + "   "
+
 	lineStyle := lipgloss.NewStyle().
 		Background(styles.ChatBackground).
 		Width(c.width)
 
 	lines := strings.Split(content, "\n")
 	for i, line := range lines {
-		lines[i] = lineStyle.Render(line)
+		lines[i] = lineStyle.Render(margin + line)
 	}
 	return strings.Join(lines, "\n") + messageGap
 }

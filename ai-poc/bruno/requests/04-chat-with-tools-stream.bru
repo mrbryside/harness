@@ -1,0 +1,119 @@
+meta {
+  name: 04 - Chat With Tools (Stream)
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/chat/completions
+  body: json
+  auth: bearer
+}
+
+headers {
+  Content-Type: application/json
+}
+
+auth:bearer {
+  token: {{apiKey}}
+}
+
+body:json {
+  {
+    "model": "{{model}}",
+    "messages": [
+      {
+        "role": "user",
+        "content": "List all files in the current directory"
+      }
+    ],
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "bash",
+          "description": "Execute a bash command in the terminal",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "command": {
+                "type": "string",
+                "description": "The bash command to execute"
+              }
+            },
+            "required": ["command"]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "find",
+          "description": "Find files matching a pattern in a directory",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "Directory path to search in"
+              },
+              "pattern": {
+                "type": "string",
+                "description": "File pattern to match (e.g., *.go)"
+              }
+            },
+            "required": ["path", "pattern"]
+          }
+        }
+      }
+    ],
+    "stream": true
+  }
+}
+
+docs {
+  # Chat With Tools (Stream)
+  
+  แบบ Stream พร้อม Tools - จะเห็นการสร้าง tool_calls ทีละชิ้น
+  
+  ## จะเห็นอะไรใน Response
+  
+  Response จะเป็น stream ที่มี tool_calls ค่อยๆ สร้าง:
+  
+  ```
+  data: {"choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}
+  
+  data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_abc","type":"function","function":{"name":"bash","arguments":""}}]},"finish_reason":null}]}
+  
+  data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\""}}]},"finish_reason":null}]}
+  
+  data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"command"}}]},"finish_reason":null}]}
+  
+  data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\":\""}}]},"finish_reason":null}]}
+  
+  data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"ls"}}]},"finish_reason":null}]}
+  
+  data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":" -la"}}]},"finish_reason":null}]}
+  
+  data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"}"}}]},"finish_reason":null}]}
+  
+  data: {"choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}
+  
+  data: [DONE]
+  ```
+  
+  ## สังเกตุจุดสำคัญ
+  - `tool_calls` ใน `delta` สร้างทีละน้อย
+  - `index: 0` → tool call แรก
+  - `function.name` มาก่อน แล้วค่อย `function.arguments`
+  - Arguments มาเป็นชิ้นเล็กๆ (ทีละตัวอักษร!)
+  - `finish_reason: "tool_calls"` บอกว่าจบเพราะจะเรียก tool
+  
+  ## เปรียบเทียบ No Stream vs Stream (Tools)
+  |  | No Stream | Stream |
+  |--|-----------|--------|
+  | tool_calls | ได้ทั้งหมดครั้งเดียว | สร้างทีละส่วน |
+  | name | มีทันที | มาทันที |
+  | arguments | JSON สมบูรณ์ | ทีละตัวอักษร |
+  | จบ | `finish_reason` | `finish_reason` + `[DONE]` |
+}

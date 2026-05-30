@@ -263,6 +263,85 @@ artifacts and keeps the background flush to the right edge.
 
 Used in: `components/chat_message_code_diff.go:applyLineBackground`.
 
+### Preventing background bleed from ANSI resets
+
+Chroma syntax highlighting emits bare SGR resets (`\x1b[m` or `\x1b[0m`)
+between tokens. When lipgloss later pads the line to `Width(totalWidth)`,
+those spaces are rendered **after** the reset, so they pick up the
+terminal's default background (usually black) instead of the diff line's
+highlight colour. The fix is to re-inject the correct background SGR
+immediately after every reset inside the content string **before**
+lipgloss sees it:
+
+```go
+func injectBackgroundAfterResets(s, bgSGR string) string {
+    s = strings.ReplaceAll(s, "\x1b[m",  "\x1b[m"+bgSGR)
+    s = strings.ReplaceAll(s, "\x1b[0m", "\x1b[0m"+bgSGR)
+    return s
+}
+```
+
+This must be applied to **every** sub-component that carries ANSI codes:
+`num`, `marker`, each `chunk`, and the continuation `indent`. The helper
+`styles.ColorToAnsiBg(bgColor)` produces the correct `\x1b[48;2;R;G;Bm`
+string from a `lipgloss.Color`.
+
+### Content width
+
+The prefix is 7 characters (`[4-digit line num] [space] [marker] [space]`),
+so the content width must be `c.width - 7`, not `c.width - 6`.
+
+### Container overhead
+
+The diff container has a left border (1 char) + left padding (2 chars) = 3 chars
+of overhead (`diffContainerOverhead = 3`). This must be subtracted from:
+- `totalWidth` passed to `wrapAndRenderLine` 
+- `contentWidth` for wrapping
+- Top padding line width in `RenderCodeDiffV2`
+
+---
+
+## Selection Overlay
+
+The drag-to-select overlay (`components/selection_overlay.go`) highlights text
+without destroying underlying backgrounds.
+
+### Reverse video (not background painting)
+
+Selection uses ANSI reverse video (`\x1b[7m`) which swaps foreground and
+background colors. This works on any background (including code diff add/remove
+colors) because it doesn't paint over them.
+
+```go
+// Start selection
+sb.WriteString("\x1b[7m")
+
+// End selection  
+sb.WriteString("\x1b[27m")
+```
+
+### Why not background colors?
+
+Painting `SelectionBgSGR` over code diff lines would hide the add/remove
+background colors, making it impossible to tell if a selected line was added
+or removed. Reverse video preserves all underlying colors while still making
+the selection clearly visible.
+
+### Partial vs full-line selections
+
+- **Partial selections** (start and end columns): highlight only the selected
+  text, do NOT pad to full width. Padding would introduce the chat background
+  color on top of code diff backgrounds.
+- **Full-line selections** (end < 0): pad to full width with reverse video so
+  the highlight extends to the right edge.
+
+### Removed code
+
+The previous approach used `rewriteBgsToSelection()` to rewrite inner
+backgrounds to the selection color. This was removed because it destroyed
+code diff colors. The function, its regex, and the `regexp` import were all
+deleted.
+
 ---
 
 ## Code Diff Component Architecture
@@ -272,33 +351,42 @@ The code diff component (`components/chat_message_code_diff.go`) renders unified
 
 ### Key Features
 - **Real line numbers**: Reads the actual file to display correct line numbers
+- **Git diff line numbers**: Context/add use new file positions, remove uses old file positions
 - **Context lines**: Shows 5 lines of context above and below changes
 - **Syntax highlighting**: Uses chroma with a custom theme (`diffChromaStyle`)
 - **Full-width backgrounds**: Line backgrounds extend to viewport edge via lipgloss `Width()`
 - **Soft-wrap handling**: Long lines are manually wrapped with ANSI preservation
-- **Git-style markers**: `+` for additions (green), `-` for removals (red)
+- **Git-style markers**: `+` for additions (light green `#bfda90`), `-` for removals (muted red `#c76b72`)
 
 ### Layout
 ```
 [4 char line num] [1 space] [1 char marker] [1 space] [content...]
 ```
 - Total prefix: 7 characters
-- Content width: `c.width - 7`
+- Content width: `c.width - diffContainerOverhead - 7 - 2` (7 for prefix, 2 for right padding)
+- Container width: `c.width - diffContainerOverhead` (3 = border 1 + padding 2)
 - Continuation lines indent 7 spaces to align with content column
 
 ### Color Scheme
 - **Context lines**: `styles.Background` (#141414) bg, white text
-- **Add lines**: `#2c3c2c` bg (dark green), `#6bff6b` text (green)
-- **Remove lines**: `#3c2c2c` bg (dark red), `#ff6b6b` text (red)
+- **Add lines**: `#23303a` bg (dark blue-gray), `#bfda90` text (light green)
+- **Remove lines**: `#34232c` bg (dark red), `#c76b72` text (muted red)
 - **Line numbers**: Context uses `styles.SidebarValue`, add/remove use matching colors
 
 ### API
 ```go
 // Full file diff with context
-chat.AppendCodeDiff("path/to/file.go", oldContent, newContent)
+// EndLine is computed automatically from NewContent
+chat.AppendCodeDiff(components.CodeDiff{
+    Path:       "path/to/file.go",
+    OldContent: oldContent,
+    NewContent: newContent,
+    StartLine:  startLine,
+})
 
 // Direct render (used internally)
-chat.RenderCodeDiff(path, oldContent, newContent)
+// EndLine is computed automatically from NewContent
+chat.RenderCodeDiffV2(path, oldContent, newContent, startLine)
 ```
 
 ### Important Notes

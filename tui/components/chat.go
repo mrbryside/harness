@@ -20,6 +20,7 @@ type chatMessage struct {
 	diffPath    string
 	diffOld     string
 	diffNew     string
+	diffStart   int // 1-based start line
 }
 
 // Chat is the scrollable message history component.
@@ -58,9 +59,15 @@ func newMarkdownRenderer(width int) *glamour.TermRenderer {
 	if width < 1 {
 		width = 1
 	}
+	// Glamour's word wrap must account for the 3-space left margin we
+	// prepend in renderAssistantMessage so lines don't overflow.
+	wrapWidth := width - 3
+	if wrapWidth < 1 {
+		wrapWidth = 1
+	}
 	r, err := glamour.NewTermRenderer(
 		glamour.WithStylesFromJSONBytes([]byte(styles.MonokaiGlamourStyle)),
-		glamour.WithWordWrap(width),
+		glamour.WithWordWrap(wrapWidth),
 	)
 	if err != nil {
 		return nil

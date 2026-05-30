@@ -156,7 +156,7 @@ func TestInputTypingResetsHistoryCursor(t *testing.T) {
 	// Type something — cursor should reset.
 	in, _ = in.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
 
-	// Up again → still "old" because it's the only item.
+	// Up → goes to history.
 	in, _ = in.Update(tea.KeyPressMsg{Code: tea.KeyUp})
 	if in.Value() != "old" {
 		t.Fatalf("expected 'old' after reset, got %q", in.Value())

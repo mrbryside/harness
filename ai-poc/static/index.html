@@ -1,0 +1,1036 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI-POC API Inspector</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: #0a0a0a;
+            color: #e0e0e0;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        header {
+            padding: 16px 20px;
+            border-bottom: 1px solid #333;
+            background: #141414;
+        }
+        header h1 {
+            font-size: 18px;
+            color: #fff;
+        }
+        header .subtitle {
+            font-size: 11px;
+            color: #888;
+            margin-top: 2px;
+        }
+        .tabs {
+            display: flex;
+            background: #1a1a1a;
+            border-bottom: 1px solid #333;
+        }
+        .tab {
+            padding: 12px 24px;
+            cursor: pointer;
+            border: none;
+            background: transparent;
+            color: #888;
+            font-size: 13px;
+            font-weight: 600;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+        .tab:hover { color: #ccc; background: #222; }
+        .tab.active { color: #4a9eff; border-bottom-color: #4a9eff; background: #1a1a2e; }
+        .tab-content { display: none; flex: 1; overflow: hidden; }
+        .tab-content.active { display: flex; flex-direction: column; }
+        
+        /* Chat Area */
+        .chat-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .message {
+            max-width: 85%;
+            padding: 16px;
+            border-radius: 12px;
+            animation: fadeIn 0.3s ease;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .message.user {
+            align-self: flex-end;
+            background: #1e3a5f;
+            border: 1px solid #2a5a8f;
+        }
+        .message.assistant {
+            align-self: flex-start;
+            background: #1a1a1a;
+            border: 1px solid #333;
+        }
+        .message .label {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+            opacity: 0.7;
+        }
+        .message.user .label { color: #6ab2ff; }
+        .message.assistant .label { color: #a0a0a0; }
+        .message .content {
+            font-size: 14px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+        }
+        
+        /* Reasoning Section */
+        .reasoning-section {
+            margin-top: 12px;
+            border: 1px solid #2a2a3a;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .reasoning-header {
+            padding: 10px 14px;
+            background: #1a1a2e;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #7a7ada;
+            user-select: none;
+        }
+        .reasoning-header:hover { background: #222240; }
+        .reasoning-header .toggle-icon {
+            transition: transform 0.2s;
+            font-size: 10px;
+        }
+        .reasoning-header.collapsed .toggle-icon { transform: rotate(-90deg); }
+        .reasoning-content {
+            padding: 14px;
+            background: #0f0f1a;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 12px;
+            line-height: 1.7;
+            color: #aaa;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .reasoning-content.collapsed { display: none; }
+        
+        /* Tool Cards */
+        .tool-card {
+            border: 1px solid;
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 12px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 12px;
+        }
+        .tool-card.call {
+            background: #0f1f0f;
+            border-color: #2a5a2a;
+        }
+        .tool-card.result {
+            background: #0f0f1f;
+            border-color: #2a2a5a;
+        }
+        .tool-card .tool-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+            font-weight: 600;
+            font-size: 12px;
+        }
+        .tool-card.call .tool-header { color: #7ada7a; }
+        .tool-card.result .tool-header { color: #7a7ada; }
+        .tool-card pre {
+            background: #0a0a0a;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            color: #ccc;
+            font-size: 11px;
+            line-height: 1.5;
+        }
+        
+        /* Input Area */
+        .input-area {
+            padding: 16px 20px;
+            border-top: 1px solid #333;
+            background: #141414;
+            display: flex;
+            gap: 12px;
+        }
+        .input-area input {
+            flex: 1;
+            padding: 12px 16px;
+            background: #1e1e1e;
+            border: 1px solid #333;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 14px;
+            outline: none;
+        }
+        .input-area input:focus { border-color: #4a9eff; }
+        .input-area button {
+            padding: 12px 24px;
+            background: #2563eb;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .input-area button:hover { background: #1d4ed8; }
+        .input-area button:disabled { background: #333; cursor: not-allowed; }
+        
+        /* History Tab - Improved */
+        .history-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+        .history-controls {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+            position: sticky;
+            top: 0;
+            background: #0a0a0a;
+            padding: 10px 0;
+            z-index: 10;
+        }
+        .history-controls button {
+            padding: 8px 16px;
+            background: #1e1e1e;
+            border: 1px solid #333;
+            color: #ccc;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .history-controls button:hover {
+            background: #2a2a2a;
+            border-color: #444;
+        }
+        
+        /* Round Card */
+        .round-card {
+            background: #141414;
+            border: 1px solid #333;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        .round-header {
+            padding: 16px 20px;
+            background: #1a1a1a;
+            border-bottom: 1px solid #333;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+        }
+        .round-header:hover { background: #222; }
+        .round-header .round-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .round-header .round-time {
+            font-size: 11px;
+            color: #666;
+        }
+        .round-header .round-toggle {
+            font-size: 12px;
+            color: #888;
+            transition: transform 0.2s;
+        }
+        .round-header.collapsed .round-toggle { transform: rotate(-90deg); }
+        .round-body {
+            padding: 0;
+            transition: all 0.3s ease;
+        }
+        .round-body.collapsed { display: none; }
+        
+        /* Collapsible Section */
+        .collapsible-section {
+            border-bottom: 1px solid #222;
+        }
+        .collapsible-section:last-child { border-bottom: none; }
+        .section-header {
+            padding: 14px 20px;
+            background: #181818;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            user-select: none;
+            transition: background 0.2s;
+        }
+        .section-header:hover { background: #1f1f1f; }
+        .section-header .section-title-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        .section-header .section-icon { font-size: 14px; }
+        .section-header .section-name { color: #ccc; }
+        .section-header .section-badge {
+            font-size: 10px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            background: #2a2a2a;
+            color: #888;
+        }
+        .section-header .section-toggle {
+            font-size: 10px;
+            color: #666;
+            transition: transform 0.2s;
+        }
+        .section-header.collapsed .section-toggle { transform: rotate(-90deg); }
+        .section-content {
+            padding: 16px 20px;
+            background: #0f0f0f;
+        }
+        .section-content.collapsed { display: none; }
+        
+        /* JSON Block */
+        .json-block {
+            background: #0a0a0a;
+            border: 1px solid #222;
+            border-radius: 6px;
+            padding: 14px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 11px;
+            line-height: 1.6;
+            color: #aaa;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .json-key { color: #9cdcfe; }
+        .json-string { color: #ce9178; }
+        .json-number { color: #b5cea8; }
+        .json-boolean { color: #569cd6; }
+        .json-null { color: #569cd6; }
+        
+        /* Stream Chunk */
+        .chunk-card {
+            background: #0f0f0f;
+            border: 1px solid #1a1a1a;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            overflow: hidden;
+        }
+        .chunk-header {
+            padding: 10px 14px;
+            background: #151515;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 11px;
+            user-select: none;
+        }
+        .chunk-header:hover { background: #1a1a1a; }
+        .chunk-header .chunk-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .chunk-header .chunk-index {
+            background: #2a2a2a;
+            color: #888;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 600;
+        }
+        .chunk-header .chunk-type {
+            color: #666;
+        }
+        .chunk-header .chunk-toggle {
+            font-size: 10px;
+            color: #666;
+            transition: transform 0.2s;
+        }
+        .chunk-header.collapsed .chunk-toggle { transform: rotate(-90deg); }
+        .chunk-content {
+            padding: 12px 14px;
+            background: #0a0a0a;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 11px;
+            line-height: 1.5;
+            color: #999;
+        }
+        .chunk-content.collapsed { display: none; }
+        
+        /* Tool Call in History */
+        .tool-call-item {
+            background: #0f0f0f;
+            border: 1px solid #1a2a1a;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            overflow: hidden;
+        }
+        .tool-call-header {
+            padding: 12px 16px;
+            background: #151f15;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+        }
+        .tool-call-header .tool-name {
+            color: #7ada7a;
+            font-weight: 600;
+        }
+        .tool-call-header .tool-id {
+            color: #555;
+            font-size: 10px;
+            font-family: monospace;
+        }
+        .tool-call-body {
+            padding: 14px 16px;
+        }
+        .tool-call-body .tool-section {
+            margin-bottom: 12px;
+        }
+        .tool-call-body .tool-section:last-child { margin-bottom: 0; }
+        .tool-call-body .tool-section-label {
+            font-size: 10px;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+        
+        /* Model badge */
+        .model-badge {
+            display: inline-block;
+            background: #1e3a5f;
+            color: #6ab2ff;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        
+        /* Message preview */
+        .message-preview {
+            background: #0f0f0f;
+            border: 1px solid #1a1a1a;
+            border-radius: 6px;
+            padding: 10px 14px;
+            margin-bottom: 8px;
+            font-size: 12px;
+        }
+        .message-preview .msg-role {
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: #666;
+            margin-bottom: 4px;
+        }
+        .message-preview .msg-content {
+            color: #aaa;
+            white-space: pre-wrap;
+            line-height: 1.5;
+        }
+        
+        .status {
+            padding: 4px 20px;
+            font-size: 11px;
+            color: #666;
+            background: #141414;
+            border-top: 1px solid #222;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+        }
+        .empty-state .icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+        .empty-state p { font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div>
+                <h1>🤖 AI-POC API Inspector</h1>
+                <div class="subtitle">OpenAI-compatible API with Tool Use & Raw Stream Visualization</div>
+            </div>
+        </header>
+        
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('chat')">💬 Chat</button>
+            <button class="tab" onclick="switchTab('history')">📡 API History</button>
+        </div>
+        
+        <!-- Chat Tab -->
+        <div id="chatTab" class="tab-content active">
+            <div class="chat-area" id="chatArea">
+                <div class="message assistant">
+                    <div class="label">System</div>
+                    <div class="content">Welcome! Send a message to see the AI stream reasoning, text, and tool calls in real-time.</div>
+                </div>
+            </div>
+            
+            <div class="input-area">
+                <input type="text" id="messageInput" placeholder="Type your message..." autocomplete="off">
+                <button id="sendBtn" onclick="sendMessage()">Send</button>
+            </div>
+        </div>
+        
+        <!-- History Tab -->
+        <div id="historyTab" class="tab-content">
+            <div class="history-area" id="historyArea">
+                <div class="history-controls">
+                    <button onclick="loadHistory()">🔄 Refresh</button>
+                    <button onclick="clearHistory()">🗑️ Clear</button>
+                </div>
+                <div id="historyContent">
+                    <div class="empty-state">
+                        <div class="icon">📡</div>
+                        <p>No API calls yet. Send a message in the Chat tab to see raw request/response data here.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="status" id="status">Ready</div>
+    </div>
+
+    <script>
+        const chatArea = document.getElementById('chatArea');
+        const messageInput = document.getElementById('messageInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const statusEl = document.getElementById('status');
+        
+        let currentAssistantMsg = null;
+        let currentTextEl = null;
+        let currentReasoningContent = null;
+
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            
+            if (tab === 'chat') {
+                document.querySelector('.tab:nth-child(1)').classList.add('active');
+                document.getElementById('chatTab').classList.add('active');
+            } else {
+                document.querySelector('.tab:nth-child(2)').classList.add('active');
+                document.getElementById('historyTab').classList.add('active');
+                loadHistory();
+            }
+        }
+
+        function addMessage(role, text) {
+            const msg = document.createElement('div');
+            msg.className = `message ${role}`;
+            const label = document.createElement('div');
+            label.className = 'label';
+            label.textContent = role;
+            const content = document.createElement('div');
+            content.className = 'content';
+            if (text) content.textContent = text;
+            msg.appendChild(label);
+            msg.appendChild(content);
+            chatArea.appendChild(msg);
+            chatArea.scrollTop = chatArea.scrollHeight;
+            return msg;
+        }
+
+        function ensureAssistantMessage() {
+            if (!currentAssistantMsg) {
+                currentAssistantMsg = document.createElement('div');
+                currentAssistantMsg.className = 'message assistant';
+                const label = document.createElement('div');
+                label.className = 'label';
+                label.textContent = 'Assistant';
+                currentAssistantMsg.appendChild(label);
+                chatArea.appendChild(currentAssistantMsg);
+                currentTextEl = null;
+            }
+            return currentAssistantMsg;
+        }
+
+        function addReasoningSection() {
+            const msg = ensureAssistantMessage();
+            const section = document.createElement('div');
+            section.className = 'reasoning-section';
+            const header = document.createElement('div');
+            header.className = 'reasoning-header';
+            header.innerHTML = '<span class="toggle-icon">▼</span> 💭 Reasoning Stream';
+            header.onclick = () => {
+                header.classList.toggle('collapsed');
+                content.classList.toggle('collapsed');
+            };
+            const content = document.createElement('div');
+            content.className = 'reasoning-content';
+            section.appendChild(header);
+            section.appendChild(content);
+            msg.appendChild(section);
+            chatArea.scrollTop = chatArea.scrollHeight;
+            return content;
+        }
+
+        function addToolCard(type, name, content) {
+            const msg = ensureAssistantMessage();
+            const card = document.createElement('div');
+            card.className = `tool-card ${type}`;
+            const header = document.createElement('div');
+            header.className = 'tool-header';
+            header.textContent = type === 'call' ? `🔧 Tool Call: ${name}` : `✅ Result: ${name}`;
+            const pre = document.createElement('pre');
+            pre.textContent = content;
+            card.appendChild(header);
+            card.appendChild(pre);
+            msg.appendChild(card);
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
+
+        async function sendMessage() {
+            const text = messageInput.value.trim();
+            if (!text) return;
+            
+            messageInput.value = '';
+            addMessage('user', text);
+            
+            sendBtn.disabled = true;
+            statusEl.textContent = 'Streaming...';
+            
+            currentAssistantMsg = null;
+            currentTextEl = null;
+            currentReasoningContent = null;
+            
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({message: text})
+                });
+                
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                
+                while (true) {
+                    const {done, value} = await reader.read();
+                    if (done) break;
+                    
+                    buffer += decoder.decode(value, {stream: true});
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop();
+                    
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = JSON.parse(line.slice(6));
+                            handleEvent(data);
+                        }
+                    }
+                }
+                
+                if (buffer.startsWith('data: ')) {
+                    const data = JSON.parse(buffer.slice(6));
+                    handleEvent(data);
+                }
+                
+                statusEl.textContent = 'Ready';
+            } catch (err) {
+                statusEl.textContent = `Error: ${err.message}`;
+                console.error(err);
+            } finally {
+                sendBtn.disabled = false;
+            }
+        }
+
+        function handleEvent(data) {
+            switch (data.type) {
+                case 'reasoning':
+                    if (!currentReasoningContent) {
+                        currentReasoningContent = addReasoningSection();
+                    }
+                    currentReasoningContent.textContent += data.content;
+                    chatArea.scrollTop = chatArea.scrollHeight;
+                    break;
+                    
+                case 'text':
+                    const msg = ensureAssistantMessage();
+                    if (!currentTextEl) {
+                        currentTextEl = document.createElement('div');
+                        currentTextEl.className = 'content';
+                        msg.appendChild(currentTextEl);
+                    }
+                    currentTextEl.textContent += data.content;
+                    chatArea.scrollTop = chatArea.scrollHeight;
+                    break;
+                    
+                case 'tool_call':
+                    addToolCard('call', data.name, data.args);
+                    break;
+                    
+                case 'tool_result':
+                    addToolCard('result', data.name, data.result);
+                    break;
+                    
+                case 'error':
+                    addMessage('assistant', `Error: ${data.content}`);
+                    break;
+                    
+                case 'done':
+                    currentAssistantMsg = null;
+                    currentTextEl = null;
+                    currentReasoningContent = null;
+                    break;
+            }
+        }
+
+        // History Functions
+        async function loadHistory() {
+            try {
+                const response = await fetch('/api/history');
+                const history = await response.json();
+                renderHistory(history);
+            } catch (err) {
+                document.getElementById('historyContent').innerHTML = `
+                    <div class="empty-state"><div class="icon">❌</div><p>Error loading history: ${err.message}</p></div>`;
+            }
+        }
+
+        async function clearHistory() {
+            try {
+                await fetch('/api/history', {method: 'DELETE'});
+                loadHistory();
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        function syntaxHighlight(json) {
+            if (!json) return '';
+            const str = typeof json === 'string' ? json : JSON.stringify(json, null, 2);
+            return str
+                .replace(/(".*?"):/g, '<span class="json-key">$1</span>:')
+                .replace(/: "(.*?)"/g, ': <span class="json-string">"$1"</span>')
+                .replace(/: (\d+)/g, ': <span class="json-number">$1</span>')
+                .replace(/: (true|false)/g, ': <span class="json-boolean">$1</span>')
+                .replace(/: (null)/g, ': <span class="json-null">$1</span>');
+        }
+
+        function makeCollapsible(header, content, collapsed = false) {
+            header.onclick = () => {
+                header.classList.toggle('collapsed');
+                content.classList.toggle('collapsed');
+            };
+            if (collapsed) {
+                header.classList.add('collapsed');
+                content.classList.add('collapsed');
+            }
+        }
+
+        function renderHistory(history) {
+            if (!history || history.length === 0) {
+                document.getElementById('historyContent').innerHTML = `
+                    <div class="empty-state"><div class="icon">📡</div><p>No API calls yet.</p></div>`;
+                return;
+            }
+
+            const container = document.createElement('div');
+            
+            for (let i = history.length - 1; i >= 0; i--) {
+                const round = history[i];
+                const time = new Date(round.timestamp).toLocaleString();
+                
+                const roundCard = document.createElement('div');
+                roundCard.className = 'round-card';
+                
+                // Round header
+                const roundHeader = document.createElement('div');
+                roundHeader.className = 'round-header';
+                roundHeader.innerHTML = `
+                    <span class="round-title">
+                        🔄 Round ${i + 1}
+                        ${round.request ? `<span class="model-badge">${round.request.model || 'unknown'}</span>` : ''}
+                    </span>
+                    <span class="round-time">${time}</span>
+                    <span class="round-toggle">▼</span>
+                `;
+                
+                const roundBody = document.createElement('div');
+                roundBody.className = 'round-body';
+                
+                makeCollapsible(roundHeader, roundBody, i < history.length - 1);
+                
+                // REQUEST SECTION
+                if (round.request) {
+                    const reqSection = document.createElement('div');
+                    reqSection.className = 'collapsible-section';
+                    
+                    const reqHeader = document.createElement('div');
+                    reqHeader.className = 'section-header';
+                    reqHeader.innerHTML = `
+                        <span class="section-title-row">
+                            <span class="section-icon">📤</span>
+                            <span class="section-name">Request</span>
+                            ${round.request.stream ? '<span class="section-badge">stream: true</span>' : ''}
+                            ${round.request.tools && round.request.tools.length > 0 ? `<span class="section-badge">${round.request.tools.length} tools</span>` : ''}
+                        </span>
+                        <span class="section-toggle">▼</span>
+                    `;
+                    
+                    const reqContent = document.createElement('div');
+                    reqContent.className = 'section-content';
+                    
+                    // Messages preview
+                    if (round.request.messages && round.request.messages.length > 0) {
+                        const msgsDiv = document.createElement('div');
+                        msgsDiv.innerHTML = '<div style="font-size: 11px; color: #666; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px;">Messages</div>';
+                        
+                        round.request.messages.forEach((msg, idx) => {
+                            const msgDiv = document.createElement('div');
+                            msgDiv.className = 'message-preview';
+                            
+                            let role = 'unknown';
+                            let content = '';
+                            try {
+                                const parsed = typeof msg === 'string' ? JSON.parse(msg) : msg;
+                                role = parsed.role || 'unknown';
+                                content = parsed.content || '';
+                                if (typeof content === 'object') {
+                                    content = JSON.stringify(content, null, 2);
+                                }
+                            } catch (e) {
+                                content = String(msg);
+                            }
+                            
+                            const roleColor = role === 'user' ? '#6ab2ff' : role === 'assistant' ? '#a0a0a0' : role === 'tool' ? '#7ada7a' : '#888';
+                            msgDiv.innerHTML = `
+                                <div class="msg-role" style="color: ${roleColor}">${role}</div>
+                                <div class="msg-content">${content.substring(0, 500)}${content.length > 500 ? '...' : ''}</div>
+                            `;
+                            msgsDiv.appendChild(msgDiv);
+                        });
+                        reqContent.appendChild(msgsDiv);
+                    }
+                    
+                    // Raw request JSON
+                    const rawReqDiv = document.createElement('div');
+                    rawReqDiv.style.marginTop = '16px';
+                    rawReqDiv.innerHTML = '<div style="font-size: 11px; color: #666; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px;">Raw JSON</div>';
+                    const rawReqJson = document.createElement('div');
+                    rawReqJson.className = 'json-block';
+                    rawReqJson.innerHTML = syntaxHighlight(round.request);
+                    rawReqDiv.appendChild(rawReqJson);
+                    reqContent.appendChild(rawReqDiv);
+                    
+                    makeCollapsible(reqHeader, reqContent, false);
+                    reqSection.appendChild(reqHeader);
+                    reqSection.appendChild(reqContent);
+                    roundBody.appendChild(reqSection);
+                }
+                
+                // RESPONSE SECTION
+                if (round.response) {
+                    const respSection = document.createElement('div');
+                    respSection.className = 'collapsible-section';
+                    
+                    const respHeader = document.createElement('div');
+                    respHeader.className = 'section-header';
+                    const toolCount = round.response.tool_calls ? round.response.tool_calls.length : 0;
+                    respHeader.innerHTML = `
+                        <span class="section-title-row">
+                            <span class="section-icon">📥</span>
+                            <span class="section-name">Response</span>
+                            ${round.response.finish_reason ? `<span class="section-badge">finish: ${round.response.finish_reason}</span>` : ''}
+                            ${toolCount > 0 ? `<span class="section-badge">${toolCount} tool calls</span>` : ''}
+                        </span>
+                        <span class="section-toggle">▼</span>
+                    `;
+                    
+                    const respContent = document.createElement('div');
+                    respContent.className = 'section-content';
+                    
+                    // Text content
+                    if (round.response.text) {
+                        const textDiv = document.createElement('div');
+                        textDiv.style.marginBottom = '16px';
+                        textDiv.innerHTML = `
+                            <div style="font-size: 11px; color: #666; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px;">Text Content</div>
+                            <div class="json-block" style="white-space: pre-wrap;">${round.response.text}</div>
+                        `;
+                        respContent.appendChild(textDiv);
+                    }
+                    
+                    // Reasoning content
+                    if (round.response.reasoning) {
+                        const reasonDiv = document.createElement('div');
+                        reasonDiv.style.marginBottom = '16px';
+                        reasonDiv.innerHTML = `
+                            <div style="font-size: 11px; color: #666; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px;">Reasoning</div>
+                            <div class="json-block" style="white-space: pre-wrap; border-color: #2a2a3a;">${round.response.reasoning}</div>
+                        `;
+                        respContent.appendChild(reasonDiv);
+                    }
+                    
+                    // Tool calls
+                    if (round.response.tool_calls && round.response.tool_calls.length > 0) {
+                        const toolsDiv = document.createElement('div');
+                        toolsDiv.style.marginBottom = '16px';
+                        toolsDiv.innerHTML = '<div style="font-size: 11px; color: #666; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px;">Tool Calls</div>';
+                        
+                        round.response.tool_calls.forEach(tc => {
+                            const toolItem = document.createElement('div');
+                            toolItem.className = 'tool-call-item';
+                            toolItem.innerHTML = `
+                                <div class="tool-call-header">
+                                    <span class="tool-name">🔧 ${tc.name}</span>
+                                    <span class="tool-id">${tc.id || 'no-id'}</span>
+                                </div>
+                                <div class="tool-call-body">
+                                    <div class="tool-section">
+                                        <div class="tool-section-label">Arguments</div>
+                                        <div class="json-block">${syntaxHighlight(tc.arguments)}</div>
+                                    </div>
+                                    ${tc.result ? `
+                                    <div class="tool-section">
+                                        <div class="tool-section-label">Result</div>
+                                        <div class="json-block" style="border-color: #2a2a5a;">${syntaxHighlight(tc.result)}</div>
+                                    </div>
+                                    ` : ''}
+                                </div>
+                            `;
+                            toolsDiv.appendChild(toolItem);
+                        });
+                        respContent.appendChild(toolsDiv);
+                    }
+                    
+                    // Raw response JSON
+                    const rawRespDiv = document.createElement('div');
+                    rawRespDiv.innerHTML = '<div style="font-size: 11px; color: #666; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px;">Raw JSON</div>';
+                    const rawRespJson = document.createElement('div');
+                    rawRespJson.className = 'json-block';
+                    rawRespJson.innerHTML = syntaxHighlight(round.response);
+                    rawRespDiv.appendChild(rawRespJson);
+                    respContent.appendChild(rawRespDiv);
+                    
+                    makeCollapsible(respHeader, respContent, false);
+                    respSection.appendChild(respHeader);
+                    respSection.appendChild(respContent);
+                    roundBody.appendChild(respSection);
+                }
+                
+                // STREAM CHUNKS SECTION
+                if (round.response && round.response.raw_chunks && round.response.raw_chunks.length > 0) {
+                    const chunksSection = document.createElement('div');
+                    chunksSection.className = 'collapsible-section';
+                    
+                    const chunksHeader = document.createElement('div');
+                    chunksHeader.className = 'section-header';
+                    chunksHeader.innerHTML = `
+                        <span class="section-title-row">
+                            <span class="section-icon">📦</span>
+                            <span class="section-name">Stream Chunks</span>
+                            <span class="section-badge">${round.response.raw_chunks.length} chunks</span>
+                        </span>
+                        <span class="section-toggle">▼</span>
+                    `;
+                    
+                    const chunksContent = document.createElement('div');
+                    chunksContent.className = 'section-content';
+                    
+                    round.response.raw_chunks.forEach((chunk, idx) => {
+                        const chunkCard = document.createElement('div');
+                        chunkCard.className = 'chunk-card';
+                        
+                        // Determine chunk type from content
+                        let chunkType = 'data';
+                        try {
+                            if (chunk.choices && chunk.choices[0]) {
+                                const delta = chunk.choices[0].delta || {};
+                                if (delta.content) chunkType = 'content';
+                                else if (delta.reasoning_content) chunkType = 'reasoning';
+                                else if (delta.tool_calls) chunkType = 'tool_call';
+                                else if (chunk.choices[0].finish_reason) chunkType = 'finish';
+                            }
+                        } catch (e) {}
+                        
+                        const chunkHeader = document.createElement('div');
+                        chunkHeader.className = 'chunk-header';
+                        chunkHeader.innerHTML = `
+                            <span class="chunk-info">
+                                <span class="chunk-index">#${idx + 1}</span>
+                                <span class="chunk-type">${chunkType}</span>
+                            </span>
+                            <span class="chunk-toggle">▼</span>
+                        `;
+                        
+                        const chunkContent = document.createElement('div');
+                        chunkContent.className = 'chunk-content';
+                        chunkContent.innerHTML = syntaxHighlight(chunk);
+                        
+                        makeCollapsible(chunkHeader, chunkContent, true);
+                        chunkCard.appendChild(chunkHeader);
+                        chunkCard.appendChild(chunkContent);
+                        chunksContent.appendChild(chunkCard);
+                    });
+                    
+                    makeCollapsible(chunksHeader, chunksContent, true);
+                    chunksSection.appendChild(chunksHeader);
+                    chunksSection.appendChild(chunksContent);
+                    roundBody.appendChild(chunksSection);
+                }
+                
+                roundCard.appendChild(roundHeader);
+                roundCard.appendChild(roundBody);
+                container.appendChild(roundCard);
+            }
+            
+            document.getElementById('historyContent').innerHTML = '';
+            document.getElementById('historyContent').appendChild(container);
+        }
+    </script>
+</body>
+</html>

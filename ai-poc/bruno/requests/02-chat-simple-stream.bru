@@ -1,0 +1,71 @@
+meta {
+  name: 02 - Chat Simple (Stream)
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/chat/completions
+  body: json
+  auth: bearer
+}
+
+headers {
+  Content-Type: application/json
+}
+
+auth:bearer {
+  token: {{apiKey}}
+}
+
+body:json {
+  {
+    "model": "{{model}}",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hello! How are you?"
+      }
+    ],
+    "stream": true
+  }
+}
+
+docs {
+  # Chat Simple (Stream)
+  
+  แบบ Stream - ได้รับคำตอบทีละชิ้นเล็กๆ (chunks) แทนที่จะได้ทั้งหมดในครั้งเดียว
+  
+  ## จะเห็นอะไรใน Response
+  
+  Response จะเป็น `text/event-stream` มีหลายบรรทัด:
+  
+  ```
+  data: {"id":"chatcmpl-xxx","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}
+  
+  data: {"id":"chatcmpl-xxx","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}
+  
+  data: {"id":"chatcmpl-xxx","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"!"},"finish_reason":null}]}
+  
+  data: {"id":"chatcmpl-xxx","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":" How"},"finish_reason":null}]}
+  
+  data: {"id":"chatcmpl-xxx","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+  
+  data: [DONE]
+  ```
+  
+  ## สังเกตุจุดสำคัญ
+  - `stream: true` → ได้หลาย chunks
+  - แต่ละ chunk มี `delta.content` เป็นชิ้นเล็กๆ
+  - Chunk สุดท้ายมี `finish_reason: "stop"` และ `delta: {}` (ว่างเปล่า)
+  - จบด้วย `data: [DONE]`
+  - ไม่มี `usage` เพราะ stream ไม่นับ token ตอนจบ
+  
+  ## เปรียบเทียบกับ No Stream
+  | No Stream | Stream |
+  |-----------|--------|
+  | ได้ทั้งหมดครั้งเดียว | ได้ทีละคำ |
+  | มี `usage` | ไม่มี `usage` |
+  | `choices[0].message` | `choices[0].delta` |
+  | JSON ชิ้นเดียว | Event stream หลายบรรทัด |
+}

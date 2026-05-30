@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How Tool Calls Stream Work - Explained</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: #0a0a0a;
+            color: #e0e0e0;
+            line-height: 1.7;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+        h1 {
+            font-size: 28px;
+            color: #fff;
+            margin-bottom: 8px;
+        }
+        .subtitle {
+            color: #888;
+            font-size: 14px;
+            margin-bottom: 40px;
+        }
+        
+        .section {
+            margin-bottom: 40px;
+        }
+        .section-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .section-title .icon {
+            font-size: 24px;
+        }
+        
+        .explanation-box {
+            background: #141414;
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+        .explanation-box h3 {
+            font-size: 15px;
+            color: #fff;
+            margin-bottom: 12px;
+        }
+        .explanation-box p {
+            color: #aaa;
+            font-size: 14px;
+            margin-bottom: 12px;
+        }
+        .explanation-box p:last-child {
+            margin-bottom: 0;
+        }
+        
+        .big-idea {
+            background: #1a1a3a;
+            border: 2px solid #3a3a6a;
+            border-radius: 12px;
+            padding: 24px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        .big-idea .label {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #7a7ada;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+        .big-idea .text {
+            font-size: 20px;
+            color: #fff;
+            font-weight: 700;
+        }
+        
+        .timeline {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin: 20px 0;
+        }
+        .timeline-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 16px;
+            padding: 20px;
+            background: #0f0f0f;
+            border: 1px solid #1a1a1a;
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+        .timeline-item:hover {
+            border-color: #333;
+            background: #111;
+        }
+        .timeline-number {
+            background: #1e3a5f;
+            color: #6ab2ff;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+        .timeline-content {
+            flex: 1;
+        }
+        .timeline-content .chunk-type {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+        .timeline-content .chunk-type.init { color: #7ada7a; }
+        .timeline-content .chunk-type.build { color: #daaa7a; }
+        .timeline-content .chunk-type.finish { color: #da7a7a; }
+        
+        .json-block {
+            background: #0a0a0a;
+            border: 1px solid #222;
+            border-radius: 6px;
+            padding: 14px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+            color: #aaa;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+            margin: 10px 0;
+        }
+        .json-key { color: #9cdcfe; }
+        .json-string { color: #ce9178; }
+        .json-number { color: #b5cea8; }
+        .highlight-green { background: #0f1f0f; border-color: #2a5a2a; }
+        .highlight-orange { background: #1f1a0f; border-color: #5a4a2a; }
+        .highlight-red { background: #1f0f0f; border-color: #5a2a2a; }
+        
+        .assembly-diagram {
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+            margin: 24px 0;
+            border: 1px solid #333;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .assembly-step {
+            padding: 20px;
+            background: #141414;
+            border-bottom: 1px solid #222;
+        }
+        .assembly-step:last-child {
+            border-bottom: none;
+        }
+        .assembly-step .step-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 10px;
+        }
+        .assembly-step .step-desc {
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 12px;
+        }
+        
+        .arrow-down {
+            text-align: center;
+            color: #555;
+            font-size: 24px;
+            padding: 8px 0;
+        }
+        
+        .result-box {
+            background: #0f1f0f;
+            border: 2px solid #2a5a2a;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 16px 0;
+        }
+        .result-box .result-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: #7ada7a;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 12px;
+        }
+        
+        .field-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 16px 0;
+            font-size: 13px;
+        }
+        .field-table th {
+            text-align: left;
+            padding: 12px;
+            background: #1a1a1a;
+            color: #fff;
+            font-weight: 600;
+            border-bottom: 1px solid #333;
+        }
+        .field-table td {
+            padding: 12px;
+            border-bottom: 1px solid #1a1a1a;
+            color: #aaa;
+        }
+        .field-table tr:hover td {
+            background: #0f0f0f;
+        }
+        .field-table .field-name {
+            font-family: 'Consolas', 'Monaco', monospace;
+            color: #9cdcfe;
+        }
+        .field-table .field-desc {
+            color: #888;
+            font-size: 12px;
+        }
+        
+        .note {
+            background: #1a1a2e;
+            border-left: 3px solid #4a9eff;
+            padding: 16px;
+            margin: 20px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        .note p {
+            color: #aaa;
+            font-size: 13px;
+        }
+        .note strong {
+            color: #fff;
+        }
+        
+        .code-fragment {
+            display: inline-block;
+            background: #1a1a1a;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 12px;
+            color: #ce9178;
+        }
+        
+        .visual-flow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+        .flow-box {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 12px;
+            text-align: center;
+        }
+        .flow-box .label {
+            font-size: 10px;
+            color: #666;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+        .flow-box .value {
+            font-family: 'Consolas', 'Monaco', monospace;
+            color: #ccc;
+        }
+        .flow-arrow {
+            color: #555;
+            font-size: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 How Tool Call Streaming Works</h1>
+        <p class="subtitle">การประกอบ Tool Call จาก Stream Chunks ทีละชิ้น</p>
+        
+        <!-- Big Idea -->
+        <div class="section">
+            <div class="big-idea">
+                <div class="label">Key Concept</div>
+                <div class="text">
+                    Tool Call ที่สมบูรณ์ = ประกอบจากหลาย chunks
+                    <br>
+                    <span style="font-size: 14px; color: #aaa; font-weight: normal;">แต่ละ chunk มีแค่เศษเสี้ยว ต้องต่อกันถึงได้ Tool Call สมบูรณ์</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Overview -->
+        <div class="section">
+            <div class="section-title">
+                <span class="icon">🎯</span>
+                Overview: เกิดอะไรขึ้น?
+            </div>
+            <div class="explanation-box">
+                <p><strong>เหตุการณ์:</strong> ผู้ใช้ถาม "List files in current directory"</p>
+                <p><strong>AI ตัดสินใจ:</strong> จะใช้ tool <span class="code-fragment">bash</span> พร้อม arguments <span class="code-fragment">{"command":"ls -la"}</span></p>
+                <p><strong>ปัญหา:</strong> ในโหมด stream AI ไม่ได้ส่ง tool call ทั้งหมดในครั้งเดียว!</p>
+                <p><strong>แต่ส่งมาเป็นชิ้นเล็กๆ:</strong> ทีละ field ทีละตัวอักษร ผ่านหลายๆ chunks</p>
+            </div>
+        </div>
+        
+        <!-- The Problem -->
+        <div class="section">
+            <div class="section-title">
+                <span class="icon">❓</span>
+                ทำไมถึงต้องประกอบ? มาดูตัวอย่าง
+            </div>
+            
+            <div class="explanation-box">
+                <h3>สิ่งที่เราอยากได้ (Non-Stream)</h3>
+                <div class="json-block highlight-green">
+{<br>
+&nbsp;&nbsp;<span class="json-key">"tool_calls"</span>: [<br>
+&nbsp;&nbsp;&nbsp;&nbsp;{<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="json-key">"id"</span>: <span class="json-string">"call_abc123"</span>,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="json-key">"type"</span>: <span class="json-string">"function"</span>,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="json-key">"function"</span>: {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="json-key">"name"</span>: <span class="json-string">"bash"</span>,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="json-key">"arguments"</span>: <span class="json-string">"{\"command\":\"ls -la\"}"</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br>
+&nbsp;&nbsp;&nbsp;&nbsp;}<br>
+&nbsp;&nbsp;]<br>
+}
+                </div>
+                <p>แบบนี้สมบูรณ์ ใช้งานได้เลย ✓</p>
+            </div>
+            
+            <div class="explanation-box">
+                <h3>สิ่งที่เราได้จริงๆ จาก Stream (หลาย chunks)</h3>
+                <div class="json-block highlight-orange">
+<span style="color:#666">Chunk 1:</span> { "tool_calls": [{ "index": 0, "id": "call_abc", "type": "function", "function": { "name": "bash", "arguments": "" } }] }<br>
+<br>
+<span style="color:#666">Chunk 2:</span> { "tool_calls": [{ "index": 0, "function": { "arguments": "{\"" } }] }<br>
+<br>
+<span style="color:#666">Chunk 3:</span> { "tool_calls": [{ "index": 0, "function": { "arguments": "command" } }] }<br>
+<br>
+<span style="color:#666">Chunk 4:</span> { "tool_calls": [{ "index": 0, "function": { "arguments": "\":\"" } }] }<br>
+<br>
+<span style="color:#666">Chunk 5:</span> { "tool_calls": [{ "index": 0, "function": { "arguments": "ls" } }] }<br>
+<br>
+<span style="color:#666">Chunk 6:</span> { "tool_calls": [{ "index": 0, "function": { "arguments": " -la" } }] }<br>
+<br>
+<span style="color:#666">Chunk 7:</span> { "tool_calls": [{ "index": 0, "function": { "arguments": "\"}" } }] }
+                </div>
+                <p><strong>ตกใจมั้ย?</strong> arguments มาทีละตัวอักษร! 😱</p>
+            </div>
+        </div>
+        
+        <!-- Assembly Process -->
+        <div class="section">
+            <div class="section-title">
+                <span class="icon">🔨</span>
+                วิธีประกอบ Tool Call (Assembly Process)
+            </div>
+            
+            <div class="assembly-diagram">
+                <div class="assembly-step">
+                    <div class="step-title">🟢 Step 1: Initialization Chunk</div>
+                    <div class="step-desc">ได้ id, type, name มาครบในชิ้นแรก</div>
+                    <div class="json-block">
+{<br>
+&nbsp;&nbsp;<span class="json-key">"tool_calls"</span>: [<br>
+&nbsp;&nbsp;&nbsp;&nbsp;{<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="json-key">"index"</span>: <span class="json-number">0</span>, &nbsp;<span style="color:#666">// tool call แรก</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="json-key">"id"</span>: <span class="json-string">"call_abc123"</span>,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="json-key">"type"</span>: <span class="json-string">"function"</span>,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="json-key">"function"</span>: {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="json-key">"name"</span>: <span class="json-string">"bash"</span>,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="json-key">"arguments"</span>: <span class="json-string">""</span> &nbsp;<span style="color:#666">// ยังว่างอยู่!</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br>
+&nbsp;&nbsp;&nbsp;&nbsp;}<br>
+&nbsp;&nbsp;]<br>
+}
+                    </div>
+                </div>
+                
+                <div class="assembly-step">
+                    <div class="step-title">🟡 Step 2-7: Building Arguments (ทีละชิ้น)</div>
+                    <div class="step-desc">arguments ถูกส่งมาทีละส่วน ต้องต่อกัน</div>
+                    <div class="visual-flow">
+                        <div class="flow-box">
+                            <div class="label">Chunk 2</div>
+                            <div class="value">{\"\u003c/div>
+                        </div>
+                        <span class="flow-arrow">+</span>
+                        <div class="flow-box">
+                            <div class="label">Chunk 3</div>
+                            <div class="value">command\u003c/div>
+                        </div>
+                        <span class="flow-arrow">+</span>
+                        <div class="flow-box">
+                            <div class="label">Chunk 4</div>
+                            <div class="value">\":\"\u003c/div>
+                        </div>
+                        <span class="flow-arrow">+</span>
+                        <div class="flow-box">
+                            <div class="label">Chunk 5</div>
+                            <div class="value">ls\u003c/div>
+                        </div>
+                        <span class="flow-arrow">+</span>
+                        <div class="flow-box">
+                            <div class="label">Chunk 6</div>
+                            <div class="value"> -la\u003c/div>
+                        </div>
+                        <span class="flow-arrow">+</span>
+                        <div class="flow-box">
+                            <div class="label">Chunk 7</div>
+                            <div class="value">\"}\u003c/div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="assembly-step">
+                    <div class="step-title">🔴 Step 8: Finish Signal</div>
+                    <div class="step-desc">รู้ว่าจบแล้วจาก finish_reason</div>
+                    <div class="json-block highlight-red">
+{<br>
+&nbsp;&nbsp;<span class="json-key">"delta"</span>: {},<br>
+&nbsp;&nbsp;<span class="json-key">"finish_reason"</span>: <span class="json-string">"tool_calls"</span> &nbsp;<span style="color:#666">// หยุดเพราะจะใช้ tool</span><br>
+}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="result-box">
+                <div class="result-title">✅ ผลลัพธ์หลังประกอบเสร็จ</div>
+                <div class="json-block highlight-green">
+{<br>
+&nbsp;&nbsp;<span class="json-key">"id"</span>: <span class="json-string">"call_abc123"</span>,<br>
+&nbsp;&nbsp;<span class="json-key">"type"</span>: <span class="json-string">"function"</span>,<br>
+&nbsp;&nbsp;<span class="json-key">"function"</span>: {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="json-key">"name"</span>: <span class="json-string">"bash"</span>,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="json-key">"arguments"</span>: <span class="json-string">"{\"command\":\"ls -la\"}"</span> &nbsp;<span style="color:#666">// ต่อกันจาก chunks 2-7</span><br>
+&nbsp;&nbsp;}<br>
+}
+                </div>
+            </div>
+        </div>
+        
+        <!-- Key Fields -->
+        <div class="section">
+            <div class="section-title">
+                <span class="icon">🔑</span>
+                Key Fields ที่ใช้ประกอบ
+            </div>
+            
+            <div class="explanation-box">
+                <h3>ทำไมต้องใช้ <span class="code-fragment">index</span>?</h3>
+                <p>AI อาจเรียกใช้หลาย tools พร้อมกัน (parallel tool calls)</p>
+                <div class="json-block">
+<span style="color:#666">// ถ้า AI เรียก 2 tools พร้อมกัน:</span><br>
+{ "tool_calls": [{ "index": 0, "function": { "name": "bash", ... } }] } <span style="color:#666">// tool แรก</span><br>
+{ "tool_calls": [{ "index": 1, "function": { "name": "find", ... } }] } <span style="color:#666">// tool ที่สอง</span>
+                </div>
+                <p><span class="code-fragment">index</span> บอกว่า chunk นี้เป็นของ tool call ไหน</p>
+            </div>
+            
+            <table class="field-table">
+                <tr>
+                    <th>Field</th>
+                    <th>ใช้ทำไม?</th>
+                </tr>
+                <tr>
+                    <td class="field-name">tool_calls[index].index</td>
+                    <td>ระบุว่าเป็นของ tool call ลำดับที่เท่าไหร่ (0, 1, 2...) <span class="field-desc">เผื่อเรียกหลาย tools พร้อมกัน</span></td>
+                </tr>
+                <tr>
+                    <td class="field-name">tool_calls[index].id</td>
+                    <td>ID ของ tool call นั้นๆ <span class="field-desc">ใช้อ้างอิงตอนส่ง result กลับ</span></td>
+                </tr>
+                <tr>
+                    <td class="field-name">tool_calls[index].function.name</td>
+                    <td>ชื่อ tool ที่จะใช้ <span class="field-desc">มาครั้งเดียวในชิ้นแรก</span></td>
+                </tr>
+                <tr>
+                    <td class="field-name">tool_calls[index].function.arguments</td>
+                    <td>JSON string ของ arguments <span class="field-desc">สะสมจากหลาย chunks! ต้องใช้ +=</span></td>
+                </tr>
+                <tr>
+                    <td class="field-name">finish_reason</td>
+                    <td>เหตุผลที่หยุด <span class="field-desc">"tool_calls" = หยุดเพราะจะใช้ tool</span></td>
+                </tr>
+            </table>
+        </div>
+        
+        <!-- Algorithm -->
+        <div class="section">
+            <div class="section-title">
+                <span class="icon">💻</span>
+                Algorithm: โค้ดประกอบยังไง?
+            </div>
+            
+            <div class="explanation-box">
+                <h3>Pseudocode</h3>
+                <div class="json-block">
+<span style="color:#666">// 1. สร้าง buffer เปล่า</span><br>
+toolCallBuffer = {} <span style="color:#666">// map[index] = toolCall</span><br>
+<br>
+<span style="color:#666">// 2. อ่านแต่ละ chunk</span><br>
+for each chunk in stream:<br>
+&nbsp;&nbsp;for each tc in chunk.delta.tool_calls:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;idx = tc.index<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#666">// ถ้ายังไม่มีใน buffer สร้างใหม่</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;if toolCallBuffer[idx] is empty:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;toolCallBuffer[idx] = {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;id: tc.id,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;type: tc.type,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;function: {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;name: tc.function.name,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;arguments: "" <span style="color:#666">// เริ่มต้นว่าง</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#666">// ถ้ามี arguments มา ให้ต่อทีหลัง</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;if tc.function.arguments exists:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;toolCallBuffer[idx].function.arguments += tc.function.arguments<br>
+<br>
+<span style="color:#666">// 3. เมื่อจบ stream แปลงเป็น array</span><br>
+result = []<br>
+for i from 0 to len(toolCallBuffer)-1:<br>
+&nbsp;&nbsp;result.push(toolCallBuffer[i])
+                </div>
+            </div>
+            
+            <div class="note">
+                <p><strong>สรุป:</strong> ใช้ <span class="code-fragment">map/dict</span> เก็บตาม <span class="code-fragment">index</span> แล้วต่อ <span class="code-fragment">arguments</span> ด้วย <span class="code-fragment">+=</span> (string concatenation)</p>
+            </div>
+        </div>
+        
+        <!-- Complete Flow -->
+        <div class="section">
+            <div class="section-title">
+                <span class="icon">🎬</span>
+                ดูตัวอย่างเต็มๆ (8 Chunks)
+            </div>
+            
+            <div class="timeline">
+                <div class="timeline-item">
+                    <div class="timeline-number">1</div>
+                    <div class="timeline-content">
+                        <div class="chunk-type init">🟢 Initialization</div>
+                        <div class="json-block">
+{ "tool_calls": [{ <span class="json-key">"index"</span>: 0, <span class="json-key">"id"</span>: "call_abc", <span class="json-key">"type"</span>: "function",
+  "function": { <span class="json-key">"name"</span>: "bash", <span class="json-key">"arguments"</span>: "" } }] }
+                        </div>
+                        <p style="font-size: 12px; color: #888;"><strong>เก็บใน buffer[0]:</strong> id="call_abc", name="bash", arguments=""</p>
+                    </div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-number">2</div>
+                    <div class="timeline-content">
+                        <div class="chunk-type build">🟡 Build Arguments</div>
+                        <div class="json-block">
+{ "tool_calls": [{ "index": 0, "function": { <span class="json-key">"arguments"</span>: "{\\"" } }] }
+                        </div>
+                        <p style="font-size: 12px; color: #888;"><strong>buffer[0].arguments +=</strong> → "{\""</p>
+                    </div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-number">3</div>
+                    <div class="timeline-content">
+                        <div class="chunk-type build">🟡 Build Arguments</div>
+                        <div class="json-block">
+{ "tool_calls": [{ "index": 0, "function": { "arguments": "command" } }] }
+                        </div>
+                        <p style="font-size: 12px; color: #888;"><strong>buffer[0].arguments +=</strong> → "{\"command"</p>
+                    </div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-number">4</div>
+                    <div class="timeline-content">
+                        <div class="chunk-type build">🟡 Build Arguments</div>
+                        <div class="json-block">
+{ "tool_calls": [{ "index": 0, "function": { "arguments": "\\":\\"" } }] }
+                        </div>
+                        <p style="font-size: 12px; color: #888;"><strong>buffer[0].arguments +=</strong> → "{\"command\":\""</p>
+                    </div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-number">5</div>
+                    <div class="timeline-content">
+                        <div class="chunk-type build">🟡 Build Arguments</div>
+                        <div class="json-block">
+{ "tool_calls": [{ "index": 0, "function": { "arguments": "ls" } }] }
+                        </div>
+                        <p style="font-size: 12px; color: #888;"><strong>buffer[0].arguments +=</strong> → "{\"command\":\"ls"</p>
+                    </div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-number">6</div>
+                    <div class="timeline-content">
+                        <div class="chunk-type build">🟡 Build Arguments</div>
+                        <div class="json-block">
+{ "tool_calls": [{ "index": 0, "function": { "arguments": " -la" } }] }
+                        </div>
+                        <p style="font-size: 12px; color: #888;"><strong>buffer[0].arguments +=</strong> → "{\"command\":\"ls -la"</p>
+                    </div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-number">7</div>
+                    <div class="timeline-content">
+                        <div class="chunk-type build">🟡 Build Arguments</div>
+                        <div class="json-block">
+{ "tool_calls": [{ "index": 0, "function": { "arguments": "\\"}" } }] }
+                        </div>
+                        <p style="font-size: 12px; color: #888;"><strong>buffer[0].arguments +=</strong> → "{\"command\":\"ls -la\"}"</p>
+                        <p style="font-size: 12px; color: #7ada7a;">✅ Arguments สมบูรณ์แล้ว! JSON valid</p>
+                    </div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-number">8</div>
+                    <div class="timeline-content">
+                        <div class="chunk-type finish">🔴 Finish</div>
+                        <div class="json-block highlight-red">
+{ "delta": {}, "finish_reason": "tool_calls" }
+                        </div>
+                        <p style="font-size: 12px; color: #888;"><strong>Stream จบ!</strong> ได้ tool call สมบูรณ์แล้ว พร้อม execute</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Summary -->
+        <div class="section">
+            <div class="section-title">
+                <span class="icon">📝</span>
+                Summary
+            </div>
+            
+            <div class="note">
+                <p><strong>สรุปการประกอบ Tool Call จาก Stream:</strong></p>
+                <p style="margin-top: 8px;">1. สร้าง <span class="code-fragment">map[index] → toolCall</span> เพื่อเก็บข้อมูล</p>
+                <p>2. อ่านแต่ละ chunk แล้ว <span class="code-fragment">+= arguments</span> เข้า buffer</p>
+                <p>3. ใช้ <span class="code-fragment">index</span> แยก tool call แต่ละอัน (เผื่อ parallel calls)</p>
+                <p>4. รอ <span class="code-fragment">finish_reason: "tool_calls"</span> ถึงรู้ว่าครบ</p>
+                <p>5. แปลง buffer เป็น array แล้ว execute tools</p>
+            </div>
+            
+            <div class="explanation-box" style="margin-top: 20px;">
+                <h3>สิ่งที่ต่างจาก Content Streaming</h3>
+                <table class="field-table">
+                    <tr>
+                        <th></th>
+                        <th>Content Stream</th>
+                        <th>Tool Call Stream</th>
+                    </tr>
+                    <tr>
+                        <td>ใช้งาน</td>
+                        <td>แสดงผลทันที</td>
+                        <td>ต้องรอครบก่อน (สะสม)</td>
+                    </tr>
+                    <tr>
+                        <td>การสะสม</td>
+                        <td>content += delta.content</td>
+                        <td>arguments += delta.tool_calls[n].function.arguments</td>
+                    </tr>
+                    <tr>
+                        <td>จบ stream</td>
+                        <td>finish_reason: "stop"</td>
+                        <td>finish_reason: "tool_calls"</td>
+                    </tr>
+                    <tr>
+                        <td>ต่อไป</td>
+                        <td>แสดงผลเลย</td>
+                        <td>ต้อง execute tool → ส่ง result → เรียก API อีกรอบ</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

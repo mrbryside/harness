@@ -6,7 +6,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/mrbryside/harness/tui/components"
-	"github.com/mrbryside/harness/tui/styles"
 )
 
 func TestInputSelectionLifecycle(t *testing.T) {
@@ -51,7 +50,7 @@ func TestInputViewOverlaysSelection(t *testing.T) {
 	in.SelectExtend(0, 5)
 
 	view := in.View()
-	if !strings.Contains(view, styles.SelectionBgSGR) {
-		t.Errorf("expected SelectionBgSGR in input View() while selecting, got:\n%q", view)
+	if !strings.Contains(view, "\x1b[7m") {
+		t.Errorf("expected reverse video escape in input View() while selecting, got:\n%q", view)
 	}
 }

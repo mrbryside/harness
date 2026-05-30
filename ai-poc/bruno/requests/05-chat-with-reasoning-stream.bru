@@ -1,0 +1,105 @@
+meta {
+  name: 05 - Chat With Reasoning (Stream)
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/chat/completions
+  body: json
+  auth: bearer
+}
+
+headers {
+  Content-Type: application/json
+}
+
+auth:bearer {
+  token: {{apiKey}}
+}
+
+body:json {
+  {
+    "model": "{{model}}",
+    "messages": [
+      {
+        "role": "user",
+        "content": "What is 2+2?"
+      }
+    ],
+    "stream": true
+  }
+}
+
+docs {
+  # Chat With Reasoning (Stream)
+  
+  แบบ Stream ที่มี Reasoning/Thinking - จะเห็น AI คิดก่อนตอบ (เหมือน o1 หรือ Claude 3.7 Sonnet)
+  
+  ## จะเห็นอะไรใน Response
+  
+  Response จะมี 2  phases:
+  
+  ### Phase 1: Reasoning (AI คิด)
+  ```
+  data: {"choices":[{"index":0,"delta":{"role":"assistant","reasoning_content":"Let"},"finish_reason":null}]}
+  
+  data: {"choices":[{"index":0,"delta":{"reasoning_content":" me"},"finish_reason":null}]}
+  
+  data: {"choices":[{"index":0,"delta":{"reasoning_content":" think"},"finish_reason":null}]}
+  
+  data: {"choices":[{"index":0,"delta":{"reasoning_content":" about"},"finish_reason":null}]}
+  
+  data: {"choices":[{"index":0,"delta":{"reasoning_content":" this"},"finish_reason":null}]}
+  
+  data: {"choices":[{"index":0,"delta":{"reasoning_content":"..."},"finish_reason":null}]}
+  ```
+  
+  ### Phase 2: Content (AI ตอบ)
+  ```
+  data: {"choices":[{"index":0,"delta":{"content":"2"},"finish_reason":null}]}
+  
+  data: {"choices":[{"index":0,"delta":{"content":"+"},"finish_reason":null}]}
+  
+  data: {"choices":[{"index":0,"delta":{"content":"2"},"finish_reason":null}]}
+  
+  data: {"choices":[{"index":0,"delta":{"content":" equals"},"finish_reason":null}]}
+  
+  data: {"choices":[{"index":0,"delta":{"content":" 4"},"finish_reason":null}]}
+  
+  data: {"choices":[{"index":0,"delta":{"content":"."},"finish_reason":null}]}
+  
+  data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+  
+  data: [DONE]
+  ```
+  
+  ## สังเกตุจุดสำคัญ
+  - Phase 1: `delta.reasoning_content` → AI คิดก่อน
+  - Phase 2: `delta.content` → AI ตอบจริง
+  - Chunk แรกมี `role: "assistant"`
+  - `reasoning_content` กับ `content` มาแยกกัน
+  - อาจมี `content_filter_results` ในแต่ละ chunk (ความปลอดภัย)
+  
+  ## โครงสร้าง Response สมบูรณ์ (จาก history)
+  ```json
+  {
+    "text": "2+2 equals 4.",
+    "reasoning": "Let me think about this...",
+    "raw_chunks": [
+      // 18 chunks ของ reasoning
+      // 3 chunks ของ content
+      // 1 chunk ของ finish
+    ],
+    "finish_reason": "stop"
+  }
+  ```
+  
+  ## เปรียบเทียบ Content vs Reasoning
+  |  | reasoning_content | content |
+  |--|-------------------|---------|
+  | แสดงผล | ซ่อนไว้ (internal) | แสดงให้ user |
+  | ลำดับ | มาก่อน | มาทีหลัง |
+  | จุดประสงค์ | AI คิด/วิเคราะห์ | คำตอบสุดท้าย |
+  | ความยาว | มักยาวกว่า | สั้นกว่า |
+}

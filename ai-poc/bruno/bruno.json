@@ -1,0 +1,9 @@
+{
+  "version": "1",
+  "name": "AI-POC OpenAI API",
+  "type": "collection",
+  "ignore": [
+    "node_modules",
+    ".git"
+  ]
+}
