@@ -33,6 +33,10 @@ type Model struct {
 	// -1 = scrolling up, 0 = off, 1 = scrolling down.
 	chatAutoScrollDir  int
 	chatAutoScrollCol  int
+
+	// Permission prompt for asking user confirmation.
+	permissionPrompt components.PermissionPrompt
+	eventBus         *EventBus
 }
 
 // ctrlCDebounceWindow is how long the user has to press Ctrl+C a second
@@ -138,20 +142,29 @@ func (c *agentCommand) Execute(args string) Result {
 	})
 
 	return Model{
-		chat:         chat,
-		input:        components.NewInput(provider.Name()),
-		sidebar:      components.NewSidebar(provider.Name()),
-		statusbar:    components.NewStatusBar(),
-		autocomplete: auto,
-		cmdRegistry:  registry,
-		provider:     provider,
-		messages:     []llm.Message{},
+		chat:             chat,
+		input:            components.NewInput(provider.Name()),
+		sidebar:          components.NewSidebar(provider.Name()),
+		statusbar:        components.NewStatusBar(),
+		autocomplete:     auto,
+		cmdRegistry:      registry,
+		provider:         provider,
+		messages:         []llm.Message{},
+		permissionPrompt: components.NewPermissionPrompt(),
+		eventBus:         NewEventBus(),
 	}
 }
 
 func (m Model) Init() tea.Cmd {
-	return m.input.Init()
+	return tea.Batch(
+		m.input.Init(),
+		func() tea.Msg {
+			return showPermissionPromptMsg{}
+		},
+	)
 }
+
+type showPermissionPromptMsg struct{}
 
 // ChatView exposes the chat component's rendered output for testing.
 func (m Model) ChatView() string {
@@ -195,4 +208,11 @@ func (m Model) SetStreamingForTest(v bool) Model {
 		m.statusbar = m.statusbar.ClearMessage()
 	}
 	return m
+}
+
+// AskPermission shows a permission question overlay and reflows chat.
+// When the user answers, the event bus emits EventQuestionAnswered.
+func (m *Model) AskPermission(question, questionID string) {
+	m.permissionPrompt.Show(question, questionID)
+	*m = m.reflowChat()
 }

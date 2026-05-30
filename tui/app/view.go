@@ -63,6 +63,11 @@ func (m Model) render() string {
 	inputView := m.input.View()
 	inputLines := lipgloss.Height(inputView)
 
+	if m.permissionPrompt.Active() {
+		inputView = m.permissionPrompt.OverlayView(chatWidth)
+		inputLines = lipgloss.Height(inputView)
+	}
+
 	chatHeight := m.height - inputLines - statusLines - outerMarginY - chatInputGap
 	if chatHeight < 1 {
 		chatHeight = 1
@@ -81,6 +86,8 @@ func (m Model) render() string {
 		autoView := m.autocomplete.View(chatWidth)
 		chatBlock = overlayAtBottom(chatBlock, autoView, chatWidth)
 	}
+
+	// Overlay permission prompt replaces input area (handled above).
 
 	sidebarBlock := lipgloss.Place(
 		sidebarWidth, sidebarHeight,
@@ -109,6 +116,7 @@ func (m Model) render() string {
 		Render("")
 
 	leftStack := lipgloss.JoinVertical(lipgloss.Left, topMarginLeft, chatBlock, chatInputSpacer, inputView)
+
 	leftCol := lipgloss.JoinHorizontal(lipgloss.Top, leftMargin, leftStack)
 
 	gapCol := lipgloss.NewStyle().

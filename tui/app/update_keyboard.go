@@ -11,6 +11,18 @@ import (
 func (m Model) handleKeyboard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
+	// Permission prompt takes highest precedence when active.
+	if m.permissionPrompt.Active() {
+		if msg.String() == "ctrl+c" {
+			cmd := m.permissionPrompt.Cancel()
+			return m, cmd
+		}
+		cmd, handled := m.permissionPrompt.HandleKey(msg)
+		if handled {
+			return m, cmd
+		}
+	}
+
 	// Autocomplete navigation takes precedence when active.
 	if m.autocomplete.Active() {
 		switch msg.Code {

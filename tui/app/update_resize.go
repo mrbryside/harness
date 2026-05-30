@@ -34,8 +34,15 @@ func (m Model) reflowChat() Model {
 	if chatWidth < 1 {
 		chatWidth = 1
 	}
-	inputLines := lipgloss.Height(m.input.View())
 	statusLines := lipgloss.Height(m.statusbar.View())
+
+	var inputLines int
+	if m.permissionPrompt.Active() {
+		inputLines = lipgloss.Height(m.permissionPrompt.OverlayView(chatWidth))
+	} else {
+		inputLines = lipgloss.Height(m.input.View())
+	}
+
 	chatHeight := m.height - inputLines - statusLines - outerMarginY - chatInputGap
 	if chatHeight < 1 {
 		chatHeight = 1

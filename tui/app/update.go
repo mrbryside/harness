@@ -54,6 +54,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleAutocompleteHide()
 	case AutocompleteSelectMsg:
 		return m.handleAutocompleteSelect(msg)
+	case components.PermissionAnswerMsg:
+		return m.handlePermissionAnswer(msg)
+	case showPermissionPromptMsg:
+		return m.handleShowPermissionPrompt()
 	}
 	return m, nil
 }
