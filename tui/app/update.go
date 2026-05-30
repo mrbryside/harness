@@ -5,59 +5,52 @@ import (
 	"github.com/mrbryside/harness/tui/components"
 )
 
-// AutocompleteShowMsg is sent when the user types a slash command prefix.
-type AutocompleteShowMsg struct {
-	Prefix string
-}
-
-// AutocompleteHideMsg is sent when the slash command prefix is cleared.
-type AutocompleteHideMsg struct{}
-
-// AutocompleteSelectMsg is sent when the user selects a suggestion.
-type AutocompleteSelectMsg struct {
-	Command string
-}
-
-// scrollTickMsg is sent every tick while the mouse is held past the
-// edge of the chat viewport so selection auto-scrolls smoothly.
-type scrollTickMsg struct{}
-
 // Update is the main message handler. It dispatches to focused
 // handler methods so each file in app/ owns a single concern.
+// listenEvents() is always re-scheduled to keep the EventBus bridge alive.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var newModel tea.Model
+	var cmd tea.Cmd
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		return m.handleResize(msg)
+		newModel, cmd = m.handleResize(msg)
 	case tea.KeyPressMsg:
-		return m.handleKeyboard(msg)
+		newModel, cmd = m.handleKeyboard(msg)
 	case tea.MouseWheelMsg:
-		return m.handleMouseWheel(msg)
+		newModel, cmd = m.handleMouseWheel(msg)
 	case tea.MouseClickMsg:
-		return m.handleMouseClick(msg)
+		newModel, cmd = m.handleMouseClick(msg)
 	case tea.MouseMotionMsg:
-		return m.handleMouseMotion(msg)
+		newModel, cmd = m.handleMouseMotion(msg)
 	case tea.MouseReleaseMsg:
-		return m.handleMouseRelease(msg)
+		newModel, cmd = m.handleMouseRelease(msg)
 	case scrollTickMsg:
-		return m.handleScrollTick()
+		newModel, cmd = m.handleScrollTick()
 	case tea.PasteMsg:
-		return m.handlePaste(msg)
+		newModel, cmd = m.handlePaste(msg)
 	case components.SendMsg:
-		return m.handleSendMsg(msg)
-	case chunkMsg:
-		return m.handleChunkMsg(msg)
+		newModel, cmd = m.handleSendMsg(msg)
+	case AssistantChunkMsg:
+		newModel, cmd = m.handleAssistantChunkMsg(msg)
+	case ToolEditMsg:
+		newModel, cmd = m.handleToolEditMsg(msg)
 	case components.StatusMsg:
-		return m.handleStatusMsg(msg)
+		newModel, cmd = m.handleStatusMsg(msg)
 	case AutocompleteShowMsg:
-		return m.handleAutocompleteShow(msg)
+		newModel, cmd = m.handleAutocompleteShow(msg)
 	case AutocompleteHideMsg:
-		return m.handleAutocompleteHide()
+		newModel, cmd = m.handleAutocompleteHide()
 	case AutocompleteSelectMsg:
-		return m.handleAutocompleteSelect(msg)
-	case components.PermissionAnswerMsg:
-		return m.handlePermissionAnswer(msg)
-	case showPermissionPromptMsg:
-		return m.handleShowPermissionPrompt()
+		newModel, cmd = m.handleAutocompleteSelect(msg)
+	case components.QuestionAnswerMsg:
+		newModel, cmd = m.handleQuestionAnswer(msg)
+	case questionShownMsg:
+		newModel, cmd = m.handleQuestionShown(msg)
+	default:
+		newModel, cmd = m, nil
 	}
-	return m, nil
+
+	m = newModel.(Model)
+	return m, tea.Batch(cmd, m.listenEvents())
 }

@@ -5,8 +5,10 @@ import (
 	"os"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/mrbryside/harness/tui/app"
+	"github.com/mrbryside/harness/agentruntime"
+	"github.com/mrbryside/harness/eventbus"
 	"github.com/mrbryside/harness/llm"
+	"github.com/mrbryside/harness/tui/app"
 )
 
 // wheelFilter drops mouse-wheel events that can't do anything anyway:
@@ -45,13 +47,10 @@ func wheelFilter(m tea.Model, msg tea.Msg) tea.Msg {
 }
 
 func main() {
-	// Bubble Tea v2 no longer auto-probes the terminal's background color in
-	// init() (that was the v1 bug whose stray OSC 11 reply leaked into the
-	// textarea on Zed and similar terminals). All terminal feature flags —
-	// alt-screen and mouse capture — are now declared on the root tea.View
-	// in app/view.go.
 	provider := &llm.MockProvider{}
-	model := app.New(provider)
+	eb := eventbus.NewEventBus()
+	model := app.New(eb)
+	agentruntime.New(eb, provider)
 
 	p := tea.NewProgram(model, tea.WithFilter(wheelFilter))
 	if _, err := p.Run(); err != nil {

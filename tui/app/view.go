@@ -9,15 +9,6 @@ import (
 	"github.com/mrbryside/harness/tui/styles"
 )
 
-// Outer margin around the entire layout so chat / input / sidebar all share
-// the same breathing room from the terminal edges.
-const (
-	outerMarginX = 2 // cols of Background on left & right
-	outerMarginY = 1 // rows of Background on top
-	innerGap     = 2 // cols between chat/input column and sidebar
-	chatInputGap = 1 // rows between chat and input
-)
-
 func (m Model) View() tea.View {
 	v := tea.NewView(m.render())
 	v.AltScreen = true
@@ -60,15 +51,17 @@ func (m Model) render() string {
 		chatWidth = 1
 	}
 
-	inputView := m.input.View()
-	inputLines := lipgloss.Height(inputView)
-
-	if m.permissionPrompt.Active() {
-		inputView = m.permissionPrompt.OverlayView(chatWidth)
-		inputLines = lipgloss.Height(inputView)
+	var bottomView string
+	var bottomLines int
+	if m.activeQuestion != nil && m.activeQuestion.question != nil && m.activeQuestion.question.Active() {
+		bottomView = m.activeQuestion.question.OverlayView(chatWidth)
+		bottomLines = lipgloss.Height(bottomView)
+	} else {
+		bottomView = m.input.View()
+		bottomLines = lipgloss.Height(bottomView)
 	}
 
-	chatHeight := m.height - inputLines - statusLines - outerMarginY - chatInputGap
+	chatHeight := m.height - bottomLines - statusLines - outerMarginY - chatInputGap
 	if chatHeight < 1 {
 		chatHeight = 1
 	}
@@ -96,7 +89,7 @@ func (m Model) render() string {
 		lipgloss.WithWhitespaceStyle(lipgloss.NewStyle().Background(styles.Background)),
 	)
 
-	leftColContentHeight := chatHeight + inputLines + outerMarginY + chatInputGap
+	leftColContentHeight := chatHeight + bottomLines + outerMarginY + chatInputGap
 	leftMargin := lipgloss.NewStyle().
 		Width(outerMarginX).
 		Height(leftColContentHeight).
@@ -115,7 +108,7 @@ func (m Model) render() string {
 		Background(styles.ChatBackground).
 		Render("")
 
-	leftStack := lipgloss.JoinVertical(lipgloss.Left, topMarginLeft, chatBlock, chatInputSpacer, inputView)
+	leftStack := lipgloss.JoinVertical(lipgloss.Left, topMarginLeft, chatBlock, chatInputSpacer, bottomView)
 
 	leftCol := lipgloss.JoinHorizontal(lipgloss.Top, leftMargin, leftStack)
 

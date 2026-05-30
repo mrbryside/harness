@@ -4,6 +4,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/mrbryside/harness/eventbus"
 	"github.com/mrbryside/harness/llm"
 	"github.com/mrbryside/harness/tui/commands"
 	"github.com/mrbryside/harness/tui/components"
@@ -17,10 +18,8 @@ type Model struct {
 	statusbar    components.StatusBar
 	autocomplete components.Autocomplete
 	cmdRegistry  *commands.Registry
-	provider     llm.LLMProvider // always the interface — never the concrete type
 	messages     []llm.Message
 	streaming    bool
-	streamCh     <-chan llm.Chunk // active stream channel; nil when not streaming
 	width        int
 	height       int
 
@@ -34,17 +33,25 @@ type Model struct {
 	chatAutoScrollDir  int
 	chatAutoScrollCol  int
 
-	// Permission prompt for asking user confirmation.
-	permissionPrompt components.PermissionPrompt
-	eventBus         *EventBus
+	// Active question overlay (pointer so EventBus subscriber can mutate it).
+	activeQuestion *activeQuestionHolder
+	eventBus       *eventbus.EventBus
+	eventCh        chan tea.Msg
+
+	// Current streaming request ID (for cancellation).
+	currentRequestID string
+}
+
+type activeQuestionHolder struct {
+	question components.Question
 }
 
 // ctrlCDebounceWindow is how long the user has to press Ctrl+C a second
 // time after the first press before the hint resets.
 const ctrlCDebounceWindow = 1500 * time.Millisecond
 
-// New creates an initialised Model with the given provider.
-func New(provider llm.LLMProvider) Model {
+// New creates an initialised Model with the given event bus.
+func New(eb *eventbus.EventBus) Model {
 	registry := commands.NewRegistry()
 	registry.Register(commands.NewHelpCommand())
 	registry.Register(commands.NewClearCommand())
@@ -74,97 +81,36 @@ func New(provider llm.LLMProvider) Model {
 	})
 
 	chat := components.NewChat(80, 20)
-	// Demo 1: Small addition (comments added)
-	chat.AppendCodeDiff(components.CodeDiff{
-		Path: "demos/agent_demo.go",
-		OldContent: `func (c *agentCommand) Name() string        { return "agent" }
-func (c *agentCommand) Description() string { return "Switch AI agent" }`,
-		NewContent: `// Name returns the command name.
-func (c *agentCommand) Name() string        { return "agent" }
-// Description returns the command description.
-func (c *agentCommand) Description() string { return "Switch AI agent" }`,
-		StartLine: 19,
-	})
 
-	// Demo 2: Delete Execute() and add a big new function (~20 lines)
-	chat.AppendCodeDiff(components.CodeDiff{
-		Path: "demos/agent_demo.go",
-		OldContent: `func (c *agentCommand) Execute(args string) Result {
-	return Result{
-		Chat:  "Available agents: coder, reviewer, architect",
-		Toast: "✓ Agent list",
-	}
-}`,
-		NewContent: `// Execute runs the agent command with full orchestration.
-// It parses the args, validates the agent name, loads config,
-// initializes the provider, and streams the response back.
-func (c *agentCommand) Execute(args string) Result {
-	// Parse and validate input
-	if strings.TrimSpace(args) == "" {
-		return Result{
-			Chat:  "Error: agent name required",
-			Toast: "✗ Missing agent",
-		}
-	}
-
-	// Load available agents from config
-	agents := []string{"coder", "reviewer", "architect", "debugger"}
-	found := false
-	for _, a := range agents {
-		if a == strings.ToLower(strings.TrimSpace(args)) {
-			found = true
-			break
-		}
-	}
-
-	if !found {
-		return Result{
-			Chat:  fmt.Sprintf("Unknown agent: %s", args),
-			Toast: "✗ Invalid agent",
-		}
-	}
-
-	// Initialize provider and stream response
-	provider := loadProvider(args)
-	if provider == nil {
-		return Result{
-			Chat:  "Failed to initialize provider",
-			Toast: "✗ Provider error",
-		}
-	}
-
-	return Result{
-		Chat:  fmt.Sprintf("Switched to %s agent", args),
-		Toast: fmt.Sprintf("✓ Active: %s", args),
-	}
-}`,
-		StartLine: 24,
-	})
-
-	return Model{
+	m := Model{
 		chat:             chat,
-		input:            components.NewInput(provider.Name()),
-		sidebar:          components.NewSidebar(provider.Name()),
+		input:            components.NewInput("mock"),
+		sidebar:          components.NewSidebar("mock"),
 		statusbar:        components.NewStatusBar(),
 		autocomplete:     auto,
 		cmdRegistry:      registry,
-		provider:         provider,
 		messages:         []llm.Message{},
-		permissionPrompt: components.NewPermissionPrompt(),
-		eventBus:         NewEventBus(),
+		activeQuestion: &activeQuestionHolder{},
+		eventBus:       eb,
+		eventCh:        make(chan tea.Msg, 100),
 	}
+
+	m.subscribeQuestionAsked()
+	m.subscribeAssistantMessaged()
+	m.subscribeToolEditFileExecuted()
+
+	return m
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(
-		m.input.Init(),
-		func() tea.Msg {
-			return showPermissionPromptMsg{}
-		},
-	)
+	return tea.Batch(m.input.Init(), m.listenEvents())
 }
 
-type showPermissionPromptMsg struct{}
+func (m Model) listenEvents() tea.Cmd {
+	return func() tea.Msg {
+		return <-m.eventCh
+	}
+}
 
 // ChatView exposes the chat component's rendered output for testing.
 func (m Model) ChatView() string {
@@ -213,6 +159,16 @@ func (m Model) SetStreamingForTest(v bool) Model {
 // AskPermission shows a permission question overlay and reflows chat.
 // When the user answers, the event bus emits EventQuestionAnswered.
 func (m *Model) AskPermission(question, questionID string) {
-	m.permissionPrompt.Show(question, questionID)
+	m.activeQuestion.question = components.CreateQuestion(components.QuestionTypePermission, questionID, question)
 	*m = m.reflowChat()
+}
+
+// QuestionActive returns whether a question is currently shown.
+func (m Model) QuestionActive() bool {
+	return m.activeQuestion != nil && m.activeQuestion.question != nil && m.activeQuestion.question.Active()
+}
+
+// EventChForTest returns the internal event channel for testing.
+func (m Model) EventChForTest() <-chan tea.Msg {
+	return m.eventCh
 }

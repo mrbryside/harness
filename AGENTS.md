@@ -1,398 +1,93 @@
-# AGENTS.md
+# harness — AGENTS.md
 
-## Agent Workflow
+## Commands
+- `make test` — run all tests (`go test ./...`)
+- `make run` — build and run TUI
+- `make run-log` — run TUI with stderr → `/tmp/harness.log`
+- `make log` — tail `/tmp/harness.log` in another terminal
+- `make build` — build to `build/harness`
+- `make clean` — remove build dir and log
 
-Same as before — TDD is mandatory, and the same general process applies:
+Go 1.26.3 (managed by asdf via `.tool-versions`).
 
-1. Read this file to understand the project.
-2. Before changing code, understand which package / component the change belongs to (see the structure below).
-3. **Never write production code without first writing a failing test.** The test must fail before the implementation is written, and pass after.
-4. After a meaningful change, run `go build ./...` and `go test ./...` to confirm nothing regressed.
-5. Update or create docs when behavior or architecture changes in a user-visible way.
+## Architecture
 
-The project no longer uses `docs/tui-plan.md` or `docs/tasks/*.md` as the
-source of work — this is now a maintained, evolving codebase. Work is driven
-by user requests.
-
----
-
-## Project: AI Harness TUI
-
-A terminal UI (TUI) for chatting with LLM providers, similar to OpenCode /
-Claude Code in appearance. Built in Go.
-
-This file is the short version that an agent must internalize before touching code.
-
-> **Agent-specific docs** live in `docs/ai/`. Read them **only when necessary**
-> — i.e. when the task at hand requires it. Do not read proactively.
-
----
-
-## Architecture (read this in full)
-
-### Layers
+EventBus-driven TUI. Three layers communicate only through `eventbus.EventBus`:
 
 ```
-┌──────────────────────────────────────────────────────┐
-│  main.go                                             │
-│    Picks an LLMProvider, creates app.Model,          │
-│    starts Bubble Tea with AltScreen + MouseCellMotion│
-├──────────────────────────────────────────────────────┤
-│  app/  (orchestration only)                          │
-│    model.go   — root Model holds all components      │
-│    update*.go — message routing by concern           │
-│    view.go    — composes the final screen            │
-├──────────────────────────────────────────────────────┤
-│  components/  (standalone Bubble Tea sub-models)     │
-│    chat*.go       — scrollable message history       │
-│    input*.go      — textarea + Build/Plan footer     │
-│    selection*.go  — drag-to-select primitive         │
-│    sidebar.go     — right-side info panel            │
-│    statusbar.go   — bottom status line               │
-│    autocomplete.go — slash-command overlay           │
-├──────────────────────────────────────────────────────┤
-│  commands/  (slash command system)                   │
-│    command*.go — registry + individual commands      │
-├──────────────────────────────────────────────────────┤
-│  memory/  (input history)                            │
-│    input_mem_history.go — HistoryStorage interface   │
-├──────────────────────────────────────────────────────┤
-│  llm/  (provider abstraction)                        │
-│    provider.go — LLMProvider interface + types       │
-│    mock.go     — MockProvider (canned dev data)      │
-├──────────────────────────────────────────────────────┤
-│  styles/                                             │
-│    theme.go      — every color used in the app       │
-│    chat_style.go — glamour JSON theme generator      │
-├──────────────────────────────────────────────────────┤
-│  docs/ai/      — agent-specific guidance (read only  │
-│                  when necessary)                     │
-└──────────────────────────────────────────────────────┘
+tui/app (Model) ◄──EventBus──► agentruntime (AgentRuntime) ◄──► llm (LLMProvider)
 ```
 
-### Package responsibilities
-
-| Package | Owns | Must not |
-|---|---|---|
-| `main` | Wiring concrete provider into `app.New`, starting Tea | Hold any business logic |
-| `app` | Routing tea messages, streaming loop, layout math | Render component internals, define colors |
-| `components` | One self-contained UI piece each | Know about other components or `llm.*` |
-| `commands` | Slash command registry and execution | Touch UI / Tea directly |
-| `memory` | Input history storage interface | Touch UI / Tea |
-| `llm` | `LLMProvider` interface, types, mock | Touch UI / Tea |
-| `styles` | The single source of truth for colors | Depend on anything else in the repo |
-
----
-
-## Hard Rules (do not violate)
-
-1. **Colors live only in `styles/theme.go`.** No hex codes anywhere else.
-2. **All LLM access goes through `llm.LLMProvider`.** App code must never reference `MockProvider` or any future concrete type.
-3. **Streaming uses `<-chan llm.Chunk`.** Do not change to a one-shot return — this pattern must work for both mock and real HTTP/SSE backends.
-4. **Layout uses `lipgloss.JoinHorizontal` / `JoinVertical` / `Place` only.** No absolute positioning, no raw ANSI.
-5. **`main.go` has no business logic.** It picks a provider and starts the program. Period.
-6. **TDD always.** Failing test first, then implementation. No exceptions.
-7. **Mouse events stay inside the program.** `tea.WithMouseCellMotion()` is set in `main.go` so the terminal never scrolls — scroll goes to the chat viewport.
-
----
-
-## LLMProvider Interface
-
-Do not change this signature without updating the mock and every caller.
-
+**Entry point:** `cli.go` — wiring order matters:
 ```go
-type LLMProvider interface {
-    Name() string
-    ChatCompletion(ctx context.Context, messages []Message, opts Options) (<-chan Chunk, error)
-}
-
-type Message struct { Role, Content string }
-type Chunk   struct { Content string; TokensUsed int; Done bool; Err error }
-type Options struct { Model string; Temperature float64 }
+eb := eventbus.NewEventBus()
+model := app.New(eb)          // subscribes to events first
+agentruntime.New(eb, provider) // emits events after
 ```
 
-The streaming contract: callers drain the channel until it's closed or a
-chunk arrives with `Done: true`. `Err` on a chunk is a stream-level error.
+**Never** call `provider.ChatCompletion()` from the TUI. The TUI emits `EventUserMessaged`; AgentRuntime subscribes, calls the provider, and emits `EventAssistantMessaged` chunks back.
 
----
+## EventBus Events
 
-## Dev Commands
+| Event | Emitted by | Consumed by | Payload |
+|---|---|---|---|
+| `question_asked` | AgentRuntime | TUI Model | `{QuestionID, Question string}` |
+| `question_answered` | TUI Model | AgentRuntime | `{QuestionID, Answer QuestionChoice}` |
+| `user_messaged` | TUI Model | AgentRuntime | `{ID, Content string}` |
+| `assistant_messaged` | AgentRuntime | TUI Model | `{ID, Content string, Done bool}` |
+| `tool_edit_file_executed` | AgentRuntime | TUI Model | `{Path, OldContent, NewContent string, StartLine int}` |
 
-```bash
-go run .             # run the TUI
-go build -o harness  # build the binary
-go test ./...        # run all tests
-go mod tidy          # after adding/removing dependencies
+## EventBus → TUI bridge (`eventCh`)
+
+EventBus subscribers run synchronously on the `Emit()` goroutine. They cannot mutate the Bubble Tea Model directly (it's passed by value). Instead, subscribers send `tea.Msg` to `m.eventCh` (buffered, size 100). `listenEvents()` in `Init()` reads from this channel and feeds messages back into the Tea loop.
+
+**Critical:** After handling any EventBus-derived message, the handler MUST return `m.listenEvents()` to keep the loop alive. Forgetting this breaks the event flow silently.
+
+## Package structure
+
+```
+cli.go                          — main(), wheelFilter, wiring
+eventbus/                       — EventBus pub/sub + event constants/payloads
+agentruntime/                   — AgentRuntime: owns LLMProvider, streams responses
+  runtime.go                    — struct, New(), init(), streamResponse()
+  subscriber_bus_*.go           — one file per EventBus subscription
+llm/                            — LLMProvider interface + MockProvider
+tui/app/                        — Bubble Tea Model
+  model.go                      — Model struct, New(), Init()
+  update.go                     — Update() dispatcher switch ONLY
+  message_types.go              — message types shared across handlers
+  layout.go                     — layout constants, coord math, reflowChat()
+  view.go                       — View(), render()
+  handle_*.go                   — one file per handler concern
+  subscriber_bus_*.go           — one file per EventBus subscription
+tui/components/                 — reusable Bubble Tea components
+  question.go                   — Question interface + registry (OCP for question types)
+  question_permission.go        — PermissionQuestion (yes/no with N options)
+  chat.go / chat_message*.go    — Chat component, message rendering
+  chat_message_tool_edit.go     — ToolEdit rendering (was code_diff)
+tui/styles/                     — Monokai theme, lipgloss styles
+tui/commands/                   — slash command registry
 ```
 
-Module path is `github.com/mrbryside/harness` — keep it that way.
-
----
-
-## Theme
-
-All colors are defined in `styles/theme.go`. Palette:
-
-- `ChatBackground` — main chat area + status bar (#0a0a0a)
-- `Background`     — sidebar + user-message panels (#141414)
-- `PanelBg`        — input area (#1e1e1e)
-
-Plus accent colors (`UserBorder`, `StatusBarAccent`, `ConnectedDot`,
-`ModeBuildColor`, `ModePlanColor`, `SidebarLabel`, `SidebarValue`,
-`AssistantText`).
-
-### Changing theme colors
-
-When modifying colors, you must update **both** the `lipgloss.Color` variable
-and its matching ANSI SGR constant (e.g. `ChatBackground` + `ChatBgSGR`).
-The SGR constants are injected after glamour/lipgloss resets to prevent
-background bleed. Read `docs/ai/theme-guide.md` before making theme changes.
-
-Do not hardcode hex anywhere else.
-
----
-
-## Keybinds (defined in `app/update.go`)
-
-| Key | Action |
-|---|---|
-| `Enter` | Send message |
-| `Alt+Enter` (`Shift+Enter` on most terminals) | Newline in input |
-| `Ctrl+C` / `Esc` | Quit |
-| `↑ / ↓ / PgUp / PgDn` | Scroll chat |
-| Mouse wheel | Scroll chat (terminal scrollback is captured) |
-
----
-
-## Debugging ANSI Background Bleed
-
-If you see **grey strips, gaps, or seams** inside the chat area (most
-visible on empty lines inside fenced code blocks, or on padding rows
-below the conversation), the cause is almost always the same:
-
-> A bare SGR reset (`\x1b[m` or `\x1b[0m`) is emitted before plain space
-> characters, so the terminal renders those spaces with its **default
-> background** instead of `styles.Background`.
-
-Three layers can each emit those resets independently:
-
-| Layer | When it emits a reset |
-|---|---|
-| `glamour` | After every styled token in rendered markdown |
-| `lipgloss` | When padding a styled string to a fixed `Width(...)` |
-| `viewport` | When padding short lines + when `FillHeight=true` for empty rows |
-
-### How to debug it
-
-1. **Reproduce in isolation.** Write a small `main` (e.g. in `/tmp`)
-   that builds the affected component and dumps `View()` directly.
-   Don't trust what the terminal shows you until you've inspected the
-   raw bytes.
-
-2. **Inspect the raw bytes.** Print the output with `\x1b` escaped so
-   it's readable. Split on `\n`, then for each suspect line check:
-   - the visible width (`lipgloss.Width(line)`)
-   - all unique SGR escapes on that line (`regexp.MustCompile(\x1b\[[0-9;]*m).FindAllString`)
-   - the raw text after stripping ANSI
-
-3. **Find the smoking gun.** Scan for the offending pattern directly:
-
-   ```go
-   strings.Contains(view, "\x1b[m    ")   // reset + plain padding
-   strings.Contains(view, "\x1b[0m    ")
-   ```
-
-   If those patterns exist, that's the grey strip.
-
-4. **Trace which layer emits it.** Render each layer in isolation
-   (e.g. just `glamour.Render(md)`, then wrap with `lipgloss.NewStyle().
-   Width(w).Render(...)`, then push through a viewport) and re-run the
-   scan. The layer that first introduces the offending pattern is the
-   culprit. In practice viewport is the outermost emitter, which is
-   why the fix lives in `Chat.View()`.
-
-5. **Patch at the outermost layer.** Insert `ChatBgSGR` right after
-   every reset:
-
-   ```go
-   out = strings.ReplaceAll(out, "\x1b[m",  "\x1b[m"+styles.ChatBgSGR)
-   out = strings.ReplaceAll(out, "\x1b[0m", "\x1b[0m"+styles.ChatBgSGR)
-   ```
-
-   Doing this at `View()` covers resets from all three layers in one
-   pass. Patching earlier (e.g. inside `renderMessage`) misses the
-   resets that viewport adds afterwards.
-
-6. **Confirm with TDD.** Add a regression test that fails before the
-   fix and passes after — assert that the rendered view does **not**
-   contain `"\x1b[m    "` or `"\x1b[0m    "`. See
-   `TestChatFencedCodeBlockEmptyLinesHaveBlackBg` for the pattern.
-
-### Inline-code grey (different problem, same family)
-
-Glamour's dark style paints inline `` `code` `` with `\x1b[…;48;5;236m`
-(256-color BG 236). We strip just that one BG segment with a regex
-(`stripInlineCodeBg` in `components/chat.go`) while preserving the
-foreground colour and any other attributes in the same SGR. Fenced
-code blocks use a 24-bit BG (`48;2;...`), so they're untouched.
-
-Test: `TestChatStripsInlineCodeBackground`.
-
----
-
-## Code Diff Full-Width Backgrounds
-
-When rendering syntax-highlighted diff lines (via chroma) with a solid
-background that must span the full viewport width, **do not manually pad
-with spaces** — the viewport's soft-wrap will split the padding onto
-wrapped continuation lines and the background will break.
-
-Instead, let lipgloss handle width + padding:
-
-```go
-style := lipgloss.NewStyle().
-    Background(lipgloss.Color(bgHex)).
-    Width(targetWidth)
-return style.Render(content)
-```
-
-Lipgloss correctly measures the visible width of strings that already
-contain ANSI escape sequences (e.g. chroma output) and pads with spaces
-that inherit the style's background colour. This avoids wrapping
-artifacts and keeps the background flush to the right edge.
-
-Used in: `components/chat_message_code_diff.go:applyLineBackground`.
-
-### Preventing background bleed from ANSI resets
-
-Chroma syntax highlighting emits bare SGR resets (`\x1b[m` or `\x1b[0m`)
-between tokens. When lipgloss later pads the line to `Width(totalWidth)`,
-those spaces are rendered **after** the reset, so they pick up the
-terminal's default background (usually black) instead of the diff line's
-highlight colour. The fix is to re-inject the correct background SGR
-immediately after every reset inside the content string **before**
-lipgloss sees it:
-
-```go
-func injectBackgroundAfterResets(s, bgSGR string) string {
-    s = strings.ReplaceAll(s, "\x1b[m",  "\x1b[m"+bgSGR)
-    s = strings.ReplaceAll(s, "\x1b[0m", "\x1b[0m"+bgSGR)
-    return s
-}
-```
-
-This must be applied to **every** sub-component that carries ANSI codes:
-`num`, `marker`, each `chunk`, and the continuation `indent`. The helper
-`styles.ColorToAnsiBg(bgColor)` produces the correct `\x1b[48;2;R;G;Bm`
-string from a `lipgloss.Color`.
-
-### Content width
-
-The prefix is 7 characters (`[4-digit line num] [space] [marker] [space]`),
-so the content width must be `c.width - 7`, not `c.width - 6`.
-
-### Container overhead
-
-The diff container has a left border (1 char) + left padding (2 chars) = 3 chars
-of overhead (`diffContainerOverhead = 3`). This must be subtracted from:
-- `totalWidth` passed to `wrapAndRenderLine` 
-- `contentWidth` for wrapping
-- Top padding line width in `RenderCodeDiffV2`
-
----
-
-## Selection Overlay
-
-The drag-to-select overlay (`components/selection_overlay.go`) highlights text
-without destroying underlying backgrounds.
-
-### Reverse video (not background painting)
-
-Selection uses ANSI reverse video (`\x1b[7m`) which swaps foreground and
-background colors. This works on any background (including code diff add/remove
-colors) because it doesn't paint over them.
-
-```go
-// Start selection
-sb.WriteString("\x1b[7m")
-
-// End selection  
-sb.WriteString("\x1b[27m")
-```
-
-### Why not background colors?
-
-Painting `SelectionBgSGR` over code diff lines would hide the add/remove
-background colors, making it impossible to tell if a selected line was added
-or removed. Reverse video preserves all underlying colors while still making
-the selection clearly visible.
-
-### Partial vs full-line selections
-
-- **Partial selections** (start and end columns): highlight only the selected
-  text, do NOT pad to full width. Padding would introduce the chat background
-  color on top of code diff backgrounds.
-- **Full-line selections** (end < 0): pad to full width with reverse video so
-  the highlight extends to the right edge.
-
-### Removed code
-
-The previous approach used `rewriteBgsToSelection()` to rewrite inner
-backgrounds to the selection color. This was removed because it destroyed
-code diff colors. The function, its regex, and the `regexp` import were all
-deleted.
-
----
-
-## Code Diff Component Architecture
-
-### Overview
-The code diff component (`components/chat_message_code_diff.go`) renders unified diffs with syntax highlighting and full-width line backgrounds. It supports both full-file diffs and snippet-based diffs with context lines.
-
-### Key Features
-- **Real line numbers**: Reads the actual file to display correct line numbers
-- **Git diff line numbers**: Context/add use new file positions, remove uses old file positions
-- **Context lines**: Shows 5 lines of context above and below changes
-- **Syntax highlighting**: Uses chroma with a custom theme (`diffChromaStyle`)
-- **Full-width backgrounds**: Line backgrounds extend to viewport edge via lipgloss `Width()`
-- **Soft-wrap handling**: Long lines are manually wrapped with ANSI preservation
-- **Git-style markers**: `+` for additions (light green `#bfda90`), `-` for removals (muted red `#c76b72`)
-
-### Layout
-```
-[4 char line num] [1 space] [1 char marker] [1 space] [content...]
-```
-- Total prefix: 7 characters
-- Content width: `c.width - diffContainerOverhead - 7 - 2` (7 for prefix, 2 for right padding)
-- Container width: `c.width - diffContainerOverhead` (3 = border 1 + padding 2)
-- Continuation lines indent 7 spaces to align with content column
-
-### Color Scheme
-- **Context lines**: `styles.Background` (#141414) bg, white text
-- **Add lines**: `#23303a` bg (dark blue-gray), `#bfda90` text (light green)
-- **Remove lines**: `#34232c` bg (dark red), `#c76b72` text (muted red)
-- **Line numbers**: Context uses `styles.SidebarValue`, add/remove use matching colors
-
-### API
-```go
-// Full file diff with context
-// EndLine is computed automatically from NewContent
-chat.AppendCodeDiff(components.CodeDiff{
-    Path:       "path/to/file.go",
-    OldContent: oldContent,
-    NewContent: newContent,
-    StartLine:  startLine,
-})
-
-// Direct render (used internally)
-// EndLine is computed automatically from NewContent
-chat.RenderCodeDiffV2(path, oldContent, newContent, startLine)
-```
-
-### Important Notes
-- The component reads the actual file to determine real line numbers
-- If file not found or oldContent not matched, falls back to simple diff (no line numbers)
-- Background colors are applied via lipgloss `Width(c.width)` to ensure full coverage
-- Manual ANSI-aware wrapping prevents viewport soft-wrap from breaking backgrounds
-
----
+## Handler file naming
+
+- `handle_*.go` — contains handler methods called from `Update()` dispatcher
+- `subscriber_bus_*.go` — contains EventBus subscription setup methods
+- Message types live in the file that uses them, or `message_types.go` if shared
+
+## Key gotchas
+
+1. **EventBus subscriber ordering** — `app.New(eb)` must be called before `agentruntime.New(eb, provider)` so subscriptions are registered before events are emitted.
+2. **`activeQuestion` is a pointer wrapper** — `*activeQuestionHolder` so EventBus subscribers can mutate shared state (value copies are lost).
+3. **`questionShownMsg`** — EventBus subscriber sends this to trigger `reflowChat()` via the Tea loop, not directly (direct mutation is lost on value copy).
+4. **MockProvider** — `llm.MockProvider` streams canned markdown responses token-by-token with 40ms delay. Used by default in `cli.go`.
+5. **`messages` field** — TUI Model keeps its own `[]llm.Message` for conversation history. AgentRuntime has a separate copy. Both are updated independently.
+6. **`handleSendMsg` returns empty cmd** — it emits `user_messaged` but returns `tea.Batch()` (nil). The `listenEvents()` cmd from `Init()` handles the async response.
+
+## Testing
+
+- `go test ./...` — all packages
+- Tests in `tui/app/` use `app.New(eb)` without provider (provider lives in AgentRuntime)
+- Full integration tests in `full_integration_test.go` use `drainEventCh()` to process `eventCh` messages synchronously
+- `EventChForTest()` exposes the internal channel for test draining
+- `SetStreamingForTest(v bool)` flips streaming flag for tests that can't start real streams

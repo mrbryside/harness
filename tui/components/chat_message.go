@@ -9,8 +9,8 @@ import (
 
 const messageGap = "\n\n"
 
-// CodeDiff represents a code change with line numbers.
-type CodeDiff struct {
+// ToolEdit represents a code change with line numbers.
+type ToolEdit struct {
 	Path       string // file path
 	OldContent string // old code
 	NewContent string // new code
@@ -26,15 +26,15 @@ func (c *Chat) AppendMessage(role, content string) {
 	c.refresh()
 }
 
-// AppendCodeDiff adds a code-diff message with explicit line numbers.
+// AppendToolEdit adds a tool-edit message with explicit line numbers.
 // EndLine is computed automatically from NewContent (StartLine + newline count).
-func (c *Chat) AppendCodeDiff(diff CodeDiff) {
+func (c *Chat) AppendToolEdit(edit ToolEdit) {
 	c.messages = append(c.messages, chatMessage{
-		role:      "code_diff",
-		diffPath:  diff.Path,
-		diffOld:   diff.OldContent,
-		diffNew:   diff.NewContent,
-		diffStart: diff.StartLine,
+		role:          "tool_edit",
+		toolEditPath:  edit.Path,
+		toolEditOld:   edit.OldContent,
+		toolEditNew:   edit.NewContent,
+		toolEditStart: edit.StartLine,
 	})
 	c.refresh()
 }
@@ -92,8 +92,8 @@ func (c *Chat) renderMessage(msg chatMessage) string {
 	switch msg.role {
 	case "user":
 		return c.renderUserMessage(msg)
-	case "code_diff":
-		return c.renderCodeDiffMessage(msg)
+	case "tool_edit":
+		return c.renderToolEditMessage(msg)
 	default:
 		return c.renderAssistantMessage(msg)
 	}

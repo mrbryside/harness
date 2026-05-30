@@ -5,13 +5,18 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/mrbryside/harness/eventbus"
 	"github.com/mrbryside/harness/tui/app"
 	"github.com/mrbryside/harness/tui/components"
 )
 
+func newViewTestModel() app.Model {
+	eb := eventbus.NewEventBus()
+	return app.New(eb)
+}
+
 func TestViewContainsChatContent(t *testing.T) {
-	m := app.New(&stubProvider{response: "hi"})
-	// set window size so chat viewport has proper dimensions
+	m := newViewTestModel()
 	m2, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	result, _ := m2.Update(components.SendMsg{Content: "hello"})
 	view := result.View().Content
@@ -21,21 +26,21 @@ func TestViewContainsChatContent(t *testing.T) {
 }
 
 func TestViewContainsConnected(t *testing.T) {
-	m := app.New(&stubProvider{response: "hi"})
+	m := newViewTestModel()
 	if !strings.Contains(m.View().Content, "Connected") {
 		t.Errorf("expected View() to contain %q, got:\n%s", "Connected", m.View().Content)
 	}
 }
 
 func TestViewContainsCtrlP(t *testing.T) {
-	m := app.New(&stubProvider{response: "hi"})
+	m := newViewTestModel()
 	if !strings.Contains(m.View().Content, "ctrl+p") {
 		t.Errorf("expected View() to contain %q, got:\n%s", "ctrl+p", m.View().Content)
 	}
 }
 
 func TestViewResizesWithWindowSize(t *testing.T) {
-	m := app.New(&stubProvider{response: "hi"})
+	m := newViewTestModel()
 	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	view := result.View().Content
 	if view == "" {
